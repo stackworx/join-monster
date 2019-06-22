@@ -5,22 +5,22 @@ import {
 } from '../shared';
 import {filter} from 'lodash';
 
-function recursiveConcat(keys) {
+function recursiveConcat(keys: string[]): string {
   if (keys.length <= 1) {
     return keys[0];
   }
   return recursiveConcat([`CONCAT(${keys[0]}, ${keys[1]})`, ...keys.slice(2)]);
 }
 
-const q = (str) => `"${str}"`;
+const q = (str: string) => `"${str}"`;
 
 function keysetPagingSelect(
-  table,
-  whereCondition,
-  order,
-  limit,
-  as,
-  options = {}
+  table: string,
+  whereCondition: string,
+  order: any,
+  limit: any,
+  as: string,
+  options: any = {}
 ) {
   let {joinCondition, joinType, extraJoin} = options;
   whereCondition = filter(whereCondition).join(' AND ') || '1 = 1';
@@ -51,13 +51,13 @@ FROM (
 }
 
 function offsetPagingSelect(
-  table,
-  pagingWhereConditions,
-  order,
-  limit,
-  offset,
-  as,
-  options = {}
+  table: string,
+  pagingWhereConditions: string,
+  order: any,
+  limit: any,
+  offset: any,
+  as: string,
+  options: any = {}
 ) {
   let {joinCondition, joinType, extraJoin} = options;
   const whereCondition = filter(pagingWhereConditions).join(' AND ') || '1 = 1';
@@ -91,12 +91,17 @@ const dialect = (module.exports = {
   ...require('./pg'),
   name: 'oracle',
 
-  compositeKey(parent, keys) {
+  compositeKey(parent: string, keys: string[]) {
     keys = keys.map((key) => `"${parent}"."${key}"`);
     return `NULLIF(${recursiveConcat(keys)}, '')`;
   },
 
-  handlePaginationAtRoot: async function(parent, node, context, tables) {
+  handlePaginationAtRoot: async function(
+    parent: string,
+    node: any,
+    context: any,
+    tables: string[]
+  ) {
     const pagingWhereConditions = [];
     if (node.sortKey) {
       const {
@@ -113,6 +118,7 @@ const dialect = (module.exports = {
       tables.push(
         keysetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -129,6 +135,7 @@ const dialect = (module.exports = {
       tables.push(
         offsetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -140,11 +147,11 @@ const dialect = (module.exports = {
   },
 
   handleJoinedOneToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    joinCondition
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    joinCondition: any[]
   ) {
     const pagingWhereConditions = [
       await node.sqlJoin(
@@ -172,6 +179,7 @@ const dialect = (module.exports = {
       tables.push(
         keysetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -187,6 +195,7 @@ const dialect = (module.exports = {
       tables.push(
         offsetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -202,12 +211,12 @@ const dialect = (module.exports = {
   },
 
   handleJoinedManyToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    joinCondition1,
-    joinCondition2
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    joinCondition1: any,
+    joinCondition2: any
   ) {
     const pagingWhereConditions = [
       await node.junction.sqlJoins[0](
@@ -239,6 +248,7 @@ const dialect = (module.exports = {
       joinType: 'LEFT',
     };
     if (node.where || node.orderBy) {
+      // @ts-ignore
       lateralJoinOptions.extraJoin = {
         name: node.name,
         as: node.as,
@@ -255,6 +265,7 @@ const dialect = (module.exports = {
       tables.push(
         keysetPagingSelect(
           node.junction.sqlTable,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -267,6 +278,7 @@ const dialect = (module.exports = {
       tables.push(
         offsetPagingSelect(
           node.junction.sqlTable,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -279,11 +291,11 @@ const dialect = (module.exports = {
   },
 
   handleBatchedOneToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    batchScope
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    batchScope: string[]
   ) {
     const pagingWhereConditions = [
       `"${node.as}"."${node.sqlBatch.thisKey.name}" = "temp"."value"`,
@@ -305,6 +317,7 @@ const dialect = (module.exports = {
       tables.push(
         keysetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -317,6 +330,7 @@ const dialect = (module.exports = {
       tables.push(
         offsetPagingSelect(
           node.name,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -331,12 +345,12 @@ const dialect = (module.exports = {
   },
 
   handleBatchedManyToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    batchScope,
-    joinCondition
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    batchScope: string[],
+    joinCondition: any
   ) {
     const pagingWhereConditions = [
       `"${node.junction.as}"."${node.junction.sqlBatch.thisKey.name}" = "temp"."value"`,
@@ -365,6 +379,7 @@ const dialect = (module.exports = {
       joinType: 'LEFT',
     };
     if (node.where || node.orderBy) {
+      // @ts-ignore
       lateralJoinOptions.extraJoin = {
         name: node.name,
         as: node.as,
@@ -381,6 +396,7 @@ const dialect = (module.exports = {
       tables.push(
         keysetPagingSelect(
           node.junction.sqlTable,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -393,6 +409,7 @@ const dialect = (module.exports = {
       tables.push(
         offsetPagingSelect(
           node.junction.sqlTable,
+          // @ts-ignore
           pagingWhereConditions,
           order,
           limit,
@@ -406,7 +423,7 @@ const dialect = (module.exports = {
   },
 });
 
-function arrToTableUnion(arr) {
+function arrToTableUnion(arr: string[]) {
   return arr
     .map(
       (val) => `

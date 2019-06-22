@@ -1,13 +1,17 @@
+// @ts-ignore
 import G from 'generatorics';
 
 // this class is responsible for generating the aliases that appear in each SQL query
 // this has different rules depending on whether we are aliasing a column or table and on whether we are minifying
 export default class AliasNamespace {
-  constructor(minify) {
-    this.minify = !!minify;
+  private mininym: string[];
+  private usedTableAliases: Set<String>;
+  private columnAssignments: {[key: string]: string};
 
+  constructor(private minify: boolean = false) {
     // a generator for infinite alias names, starting with the shortest possible
     // this is helpful for generating the names when minifying
+    // @ts-ignore
     this.mininym = G.baseNAll(
       'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ#$'
     );
@@ -20,17 +24,19 @@ export default class AliasNamespace {
     this.columnAssignments = {};
   }
 
-  generate(type, name) {
+  generate(type: string, name: string) {
     // if minifiying, make everything ugly and unique.
     if (this.minify) {
       // tables definitely all need unique names
       if (type === 'table') {
+        // @ts-ignore
         return this.mininym.next().value.join('');
       }
 
       // but if its a column, we dont need to worry about the uniqueness from other columns
       // because the columns will get prefixed with the parent(s)
       if (!this.columnAssignments[name]) {
+        // @ts-ignore
         this.columnAssignments[name] = this.mininym.next().value.join('');
       }
 

@@ -9,21 +9,21 @@ import {
 const dialect = (module.exports = {
   name: 'pg',
 
-  quote(str) {
+  quote(str: string) {
     return `"${str}"`;
   },
 
-  compositeKey(parent, keys) {
+  compositeKey(parent: string, keys: string[]) {
     keys = keys.map((key) => `"${parent}"."${key}"`);
     return `NULLIF(CONCAT(${keys.join(', ')}), '')`;
   },
 
   handleJoinedOneToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    joinCondition
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    joinCondition: any
   ) {
     const pagingWhereConditions = [
       await node.sqlJoin(
@@ -46,6 +46,7 @@ const dialect = (module.exports = {
         limit,
         order,
         whereCondition: whereAddendum,
+        // @ts-ignore
       } = interpretForKeysetPaging(node, dialect);
       pagingWhereConditions.push(whereAddendum);
       tables.push(
@@ -59,6 +60,7 @@ const dialect = (module.exports = {
         )
       );
     } else if (node.orderBy) {
+      // @ts-ignore
       const {limit, offset, order} = interpretForOffsetPaging(node, dialect);
       tables.push(
         offsetPagingSelect(
@@ -78,12 +80,12 @@ const dialect = (module.exports = {
   },
 
   handleBatchedManyToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    batchScope,
-    joinCondition
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    batchScope: string[],
+    joinCondition: any
   ) {
     const thisKeyOperand = generateCastExpressionFromValueType(
       `"${node.junction.as}"."${node.junction.sqlBatch.thisKey.name}"`,
@@ -119,6 +121,7 @@ const dialect = (module.exports = {
       joinType: 'LEFT',
     };
     if (node.where || node.orderBy) {
+      // @ts-ignore
       lateralJoinOptions.extraJoin = {
         name: node.name,
         as: node.as,
@@ -130,6 +133,7 @@ const dialect = (module.exports = {
         limit,
         order,
         whereCondition: whereAddendum,
+        // @ts-ignore
       } = interpretForKeysetPaging(node, dialect);
       pagingWhereConditions.push(whereAddendum);
       tables.push(
@@ -143,6 +147,7 @@ const dialect = (module.exports = {
         )
       );
     } else if (node.orderBy || node.junction.orderBy) {
+      // @ts-ignore
       const {limit, offset, order} = interpretForOffsetPaging(node, dialect);
       tables.push(
         offsetPagingSelect(
@@ -160,12 +165,12 @@ const dialect = (module.exports = {
   },
 
   handleJoinedManyToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    joinCondition1,
-    joinCondition2
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    joinCondition1: any,
+    joinCondition2: any
   ) {
     const pagingWhereConditions = [
       await node.junction.sqlJoins[0](
@@ -197,6 +202,7 @@ const dialect = (module.exports = {
       joinType: 'LEFT',
     };
     if (node.where || node.orderBy) {
+      // @ts-ignore
       lateralJoinOptions.extraJoin = {
         name: node.name,
         as: node.as,
@@ -208,6 +214,7 @@ const dialect = (module.exports = {
         limit,
         order,
         whereCondition: whereAddendum,
+        // @ts-ignore
       } = interpretForKeysetPaging(node, dialect);
       pagingWhereConditions.push(whereAddendum);
       tables.push(
@@ -221,6 +228,7 @@ const dialect = (module.exports = {
         )
       );
     } else if (node.orderBy || node.junction.orderBy) {
+      // @ts-ignore
       const {limit, offset, order} = interpretForOffsetPaging(node, dialect);
       tables.push(
         offsetPagingSelect(
@@ -236,13 +244,19 @@ const dialect = (module.exports = {
     }
   },
 
-  handlePaginationAtRoot: async function(parent, node, context, tables) {
+  handlePaginationAtRoot: async function(
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[]
+  ) {
     const pagingWhereConditions = [];
     if (node.sortKey) {
       const {
         limit,
         order,
         whereCondition: whereAddendum,
+        // @ts-ignore
       } = interpretForKeysetPaging(node, dialect);
       pagingWhereConditions.push(whereAddendum);
       if (node.where) {
@@ -260,6 +274,7 @@ const dialect = (module.exports = {
         )
       );
     } else if (node.orderBy) {
+      // @ts-ignore
       const {limit, offset, order} = interpretForOffsetPaging(node, dialect);
       if (node.where) {
         pagingWhereConditions.push(
@@ -280,11 +295,11 @@ const dialect = (module.exports = {
   },
 
   handleBatchedOneToManyPaginated: async function(
-    parent,
-    node,
-    context,
-    tables,
-    batchScope
+    parent: any,
+    node: any,
+    context: any,
+    tables: string[],
+    batchScope: string[]
   ) {
     const thisKeyOperand = generateCastExpressionFromValueType(
       `"${node.as}"."${node.sqlBatch.thisKey.name}"`,
@@ -308,6 +323,7 @@ const dialect = (module.exports = {
         limit,
         order,
         whereCondition: whereAddendum,
+        // @ts-ignore
       } = interpretForKeysetPaging(node, dialect);
       pagingWhereConditions.push(whereAddendum);
       tables.push(
@@ -321,6 +337,7 @@ const dialect = (module.exports = {
         )
       );
     } else if (node.orderBy) {
+      // @ts-ignore
       const {limit, offset, order} = interpretForOffsetPaging(node, dialect);
       tables.push(
         offsetPagingSelect(

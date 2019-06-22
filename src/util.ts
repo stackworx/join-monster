@@ -1,5 +1,6 @@
 import util from 'util';
 import assert from 'assert';
+// @ts-ignore
 import nesthydrationjs from 'nesthydrationjs';
 import stringifySQL from './stringifiers/dispatcher';
 import resolveUnions from './resolve-unions';
@@ -7,34 +8,36 @@ import deprecate from 'deprecate';
 const debug = require('debug')('join-monster');
 
 import defineObjectShape from './define-object-shape';
+import {Options, SQLAst, DbCall, ShapeDefinition} from './types';
 
 const NestHydrationJS = nesthydrationjs();
 
-export function emphasize(str, colorCode = 33) {
+export function emphasize(str: string, colorCode = 33) {
   return `\n\x1b[1;${colorCode}m${str}\x1b[0m\n`;
 }
 
-export function inspect(obj, options = {}) {
+export function inspect(obj: any, options = {}) {
   return util.inspect(obj, {depth: 12, ...options});
 }
 
 // really? yes, really
-export function last(arr) {
+export function last(arr: any[]) {
   return arr[arr.length - 1];
 }
 
-export function wrap(maybeArr) {
+export function wrap(maybeArr: unknown) {
+  // @ts-ignore
   if (maybeArr.constructor === Array) {
     return maybeArr;
   }
   return [maybeArr];
 }
 
-export function isEmptyArray(val) {
+export function isEmptyArray(val: unknown) {
   return Array.isArray(val) && val.length === 0;
 }
 
-export function ensure(obj, prop, name) {
+export function ensure(obj: any, prop: string, name: string) {
   if (!obj[prop]) {
     throw new Error(
       `property "${prop}" must be defined on object: ${name ||
@@ -44,27 +47,28 @@ export function ensure(obj, prop, name) {
   return obj[prop];
 }
 
-export function unthunk(val, ...args) {
+export function unthunk(val: unknown, ...args: any[]) {
   return typeof val === 'function' ? val(...args) : val;
 }
 
-export function validateSqlAST(topNode) {
+export function validateSqlAST(topNode: SQLAst) {
   // TODO: this could be a bit more comprehensive
+  // @ts-ignore
   assert(topNode.sqlJoin == null, 'root level field can not have "sqlJoin"');
 }
 
-export function objToCursor(obj) {
+export function objToCursor(obj: any) {
   const str = JSON.stringify(obj);
   return Buffer.from(str).toString('base64');
 }
 
-export function cursorToObj(cursor) {
+export function cursorToObj(cursor: string) {
   const str = Buffer.from(cursor, 'base64').toString();
   return JSON.parse(str);
 }
 
 // wrap in a pair of single quotes for the SQL if needed
-export function maybeQuote(value, dialectName) {
+export function maybeQuote(value: any, dialectName?: string) {
   if (value == null) {
     return 'NULL';
   }
@@ -114,14 +118,20 @@ export function maybeQuote(value, dialectName) {
   return escaped;
 }
 
-function getDialectName(options) {
+function getDialectName(options: Options) {
   if (options.dialectModule) {
     return options.dialectModule.name;
   }
   return options.dialect || 'sqlite3';
 }
 
-export function buildWhereFunction(type, condition, options) {
+export function buildWhereFunction(
+  // TODO: type
+  type: any,
+  // TODO: type
+  condition: any,
+  options: Options
+) {
   const name = getDialectName(options);
   if (typeof condition === 'function') {
     return condition;
@@ -141,7 +151,7 @@ export function buildWhereFunction(type, condition, options) {
       uniqueKey.length,
       `The unique key for the "${type.name}" type is a composite. You must provide an array of values for each column.`
     );
-    return (table) =>
+    return (table: string) =>
       uniqueKey
         .map(
           (key, i) =>
@@ -150,12 +160,17 @@ export function buildWhereFunction(type, condition, options) {
         .join(' AND ');
     // single keys are simple
   }
-  return (table) =>
+  return (table: string) =>
     `${table}.${quote}${uniqueKey}${quote} = ${maybeQuote(condition)}`;
 }
 
 // handles the different callback signatures and return values.
-export function handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition) {
+export function handleUserDbCall(
+  dbCall: DbCall,
+  sql: string,
+  sqlAST: SQLAst,
+  shapeDefinition: ShapeDefinition
+) {
   // if there are two args, we're in "callback mode"
   if (dbCall.length === 2) {
     // wrap it in a promise
@@ -173,7 +188,7 @@ export function handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition) {
           const data = NestHydrationJS.nest(rows, shapeDefinition);
           resolveUnions(data, sqlAST);
           if (debug.enabled) {
-            debug(emphasize('SHAPED_DATA', inspect(data)));
+            debug(emphasize('SHAPED_DATA'), inspect(data));
           }
           resolve(data);
         }
@@ -182,9 +197,10 @@ export function handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition) {
   }
 
   // otherwise, we are expecting a promise of the data
-  const result = dbCall(sql);
+  // @ts-ignore
+  const result: Promise<any[]> = dbCall(sql);
   if (typeof result.then === 'function') {
-    return result.then((rows) => {
+    return result.then((rows: any[]) => {
       rows = validate(rows);
       if (debug.enabled) {
         debug(emphasize('RAW DATA'), inspect(rows.slice(0, 8)));
@@ -204,7 +220,7 @@ export function handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition) {
 }
 
 // validate the data they gave us
-function validate(rows) {
+function validate(rows: any[] | {rows: any[]}) {
   // its supposed to be an array of objects
   if (Array.isArray(rows)) return rows;
   // a check for the most common error. a lot of ORMs return an object with the desired data on the `rows` property
@@ -216,7 +232,11 @@ function validate(rows) {
   );
 }
 
-export async function compileSqlAST(sqlAST, context, options) {
+export async function compileSqlAST(
+  sqlAST: SQLAst,
+  context: any,
+  options: Options
+) {
   if (debug.enabled) {
     debug(emphasize('SQL_AST'), inspect(sqlAST));
   }

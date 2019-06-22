@@ -1,10 +1,13 @@
 import assert from 'assert';
+import {GraphQLResolveInfo} from 'graphql/type/definition';
 
-import * as queryAST from './query-ast-to-sql-ast';
+import * as queryAST from './query-ast-to-sql-ast/index';
 import arrToConnection from './array-to-connection';
 import AliasNamespace from './alias-namespace';
-import nextBatch from './batch-planner';
+import nextBatch from './batch-planner/index';
 import {buildWhereFunction, handleUserDbCall, compileSqlAST} from './util';
+import {DbCall, Options, Where} from './types';
+import {FieldNode} from 'graphql/language/ast';
 
 /*         _ _ _                _
   ___ __ _| | | |__   __ _  ___| | __
@@ -80,9 +83,18 @@ import {buildWhereFunction, handleUserDbCall, compileSqlAST} from './util';
  * @param {Object} options.dialectModule - An alternative to options.dialect. You can provide a custom implementation of one of the supported dialects.
  * @returns {Promise.<Object>} The correctly nested data from the database.
  */
-async function joinMonster(resolveInfo, context, dbCall, options = {}) {
+async function joinMonster<TContext>(
+  resolveInfo: GraphQLResolveInfo,
+  context: TContext,
+  dbCall: DbCall,
+  options: Options = {}
+) {
   // we need to read the query AST and build a new "SQL AST" from which the SQL and
-  const sqlAST = queryAST.queryASTToSqlAST(resolveInfo, options, context);
+  const sqlAST = queryAST.queryASTToSqlAST<TContext>(
+    resolveInfo,
+    options,
+    context
+  );
   const {sql, shapeDefinition} = await compileSqlAST(sqlAST, context, options);
   if (!sql) return {};
 
@@ -99,6 +111,7 @@ async function joinMonster(resolveInfo, context, dbCall, options = {}) {
 
   // check for batch data
   if (Array.isArray(data)) {
+    // @ts-ignore
     const childrenToCheck = sqlAST.children.filter((child) => child.sqlBatch);
     return data.filter((d) => {
       for (const child of childrenToCheck) {
@@ -123,15 +136,17 @@ async function joinMonster(resolveInfo, context, dbCall, options = {}) {
  * @param {Object} [options] - Same as `joinMonster` function's options.
  * @returns {Promise.<Object>} The correctly nested data from the database. The GraphQL Type is added to the "\_\_type\_\_" property, which is helpful for the `resolveType` function in the `nodeDefinitions` of **graphql-relay-js**.
  */
-async function getNode(
-  typeName,
-  resolveInfo,
-  context,
-  condition,
-  dbCall,
-  options = {}
+async function getNode<TContext>(
+  typeName: string,
+  resolveInfo: GraphQLResolveInfo,
+  context: TContext,
+  condition: Where<TContext, {}> | string | number | any[],
+  dbCall: DbCall,
+  options: Options = {}
 ) {
   // get the GraphQL type from the schema using the name
+  // TODO: alternative
+  // @ts-ignore
   const type = resolveInfo.schema._typeMap[typeName];
   assert(type, `Type "${typeName}" not found in your schema.`);
   assert(
@@ -154,11 +169,14 @@ async function getNode(
   };
   const namespace = new AliasNamespace(options.minify);
   const sqlAST = {};
-  const fieldNodes = resolveInfo.fieldNodes || resolveInfo.fieldASTs;
+  const fieldNodes: ReadonlyArray<FieldNode> =
+    // @ts-ignore
+    resolveInfo.fieldNodes || resolveInfo.fieldASTs;
   // uses the same underlying function as the main `joinMonster`
   queryAST.populateASTNode.call(
     resolveInfo,
     fieldNodes[0],
+    // @ts-ignore
     fakeParentNode,
     sqlAST,
     namespace,
@@ -166,12 +184,17 @@ async function getNode(
     options,
     context
   );
+  // @ts-ignore
   queryAST.pruneDuplicateSqlDeps(sqlAST, namespace);
+  // @ts-ignore
   const {sql, shapeDefinition} = await compileSqlAST(sqlAST, context, options);
   const data = arrToConnection(
+    // @ts-ignore
     await handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition),
+    // @ts-ignore
     sqlAST
   );
+  // @ts-ignore
   await nextBatch(sqlAST, data, dbCall, context, options);
   if (!data) return data;
   data.__type__ = type;

@@ -2,19 +2,30 @@ import assert from 'assert';
 import {flatMap} from 'lodash';
 import deprecate from 'deprecate';
 import {getArgumentValues} from 'graphql/execution/values';
+// @ts-ignore
 import idx from 'idx';
+import {FieldNode, SelectionNode} from 'graphql/language/ast';
+import {
+  GraphQLResolveInfo,
+  GraphQLObjectType,
+  GraphQLOutputType,
+  GraphQLField,
+} from 'graphql/type/definition';
 
+import {Options, DbCall, OrderBy, SQLAst} from '../types';
 import AliasNamespace from '../alias-namespace';
 import {wrap, ensure, unthunk, inspect} from '../util';
+import {any} from 'bluebird';
 
 class SQLASTNode {
-  constructor(parentNode, props) {
+  constructor(parentNode: SQLASTNode | null, props?: any) {
     Object.defineProperty(this, 'parent', {
       enumerable: false,
       value: parentNode,
     });
 
     for (let prop in props) {
+      // @ts-ignore
       this[prop] = props[prop];
     }
   }
@@ -27,7 +38,7 @@ const TABLE_TYPES = [
   'GraphQLInterfaceType',
 ];
 
-function mergeAll(fieldNodes) {
+function mergeAll(fieldNodes: ReadonlyArray<FieldNode>) {
   const newFieldNodes = [...fieldNodes];
   while (newFieldNodes.length > 1) {
     newFieldNodes.push(merge(newFieldNodes.pop(), newFieldNodes.pop()));
@@ -35,7 +46,7 @@ function mergeAll(fieldNodes) {
   return newFieldNodes;
 }
 
-function merge(dest, src) {
+function merge(dest: any, src: any) {
   return {
     ...dest,
     selectionSet: {
@@ -48,7 +59,11 @@ function merge(dest, src) {
   };
 }
 
-export function queryASTToSqlAST(resolveInfo, options, context) {
+export function queryASTToSqlAST<TContext>(
+  resolveInfo: GraphQLResolveInfo,
+  options: Options,
+  context: TContext
+) {
   // this is responsible for all the logic regarding creating SQL aliases
   // we need varying degrees of uniqueness and readability
   // force oracle to minify, because it has this 30-character limit on column identifiers
@@ -57,10 +72,13 @@ export function queryASTToSqlAST(resolveInfo, options, context) {
   );
 
   // we'll build up the AST representing the SQL recursively
-  const sqlAST = {};
+  // @ts-ignore
+  const sqlAST: SQLAst = {};
 
   // v0.8 changed the "fieldASTs" property to "fieldNodes". we want to support both
-  let fieldNodes = resolveInfo.fieldNodes || resolveInfo.fieldASTs;
+  let fieldNodes: ReadonlyArray<FieldNode> =
+    // @ts-ignore
+    resolveInfo.fieldNodes || resolveInfo.fieldASTs;
 
   // fieldNodes is usually an array of 1 GraphQL node. If a field is requested twice *without* aliases, both nodes will be in this array
   // we need to merge it into one
@@ -90,7 +108,7 @@ export function queryASTToSqlAST(resolveInfo, options, context) {
 
   // make sure they started this party on a table, interface or union.
   assert.ok(
-    ['table', 'union'].indexOf(sqlAST.type) > -1,
+    ['table', 'union'].indexOf(sqlAST.type!!) > -1,
     'Must call joinMonster in a resolver on a field where the type is decorated with "sqlTable".'
   );
 
@@ -100,14 +118,16 @@ export function queryASTToSqlAST(resolveInfo, options, context) {
   return sqlAST;
 }
 
-export function populateASTNode(
-  queryASTNode,
-  parentTypeNode,
-  sqlASTNode,
-  namespace,
-  depth,
-  options,
-  context
+export function populateASTNode<TContext>(
+  this: GraphQLResolveInfo,
+  queryASTNode: FieldNode,
+  parentTypeNode: GraphQLObjectType,
+  // TODO: type
+  sqlASTNode: {type?: string},
+  namespace: AliasNamespace,
+  depth: number,
+  options: Options,
+  context: TContext
 ) {
   // first, get the name of the field being queried
   const fieldName = queryASTNode.name.value;
@@ -119,7 +139,9 @@ export function populateASTNode(
   }
 
   // then, get the field from the schema definition
-  let field = parentTypeNode._fields[fieldName];
+  // TODO: is there alternative?
+  // @ts-ignore
+  let field: GraphQLField = parentTypeNode._fields[fieldName];
   if (!field) {
     throw new Error(
       `The field "${fieldName}" is not in the ${parentTypeNode.name} type.`
@@ -127,12 +149,15 @@ export function populateASTNode(
   }
 
   let fieldIncludes;
+  // @ts-ignore
   if (idx(sqlASTNode, (_) => _.parent.junction.include[fieldName])) {
+    // @ts-ignore
     fieldIncludes = sqlASTNode.parent.junction.include[fieldName];
     field = {
       ...field,
       ...fieldIncludes,
     };
+    // @ts-ignore
     sqlASTNode.fromOtherTable = sqlASTNode.parent.junction.as;
   }
 
@@ -147,6 +172,7 @@ export function populateASTNode(
   // the actual type might be wrapped in a GraphQLNonNull type
   let gqlType = stripNonNullType(field.type);
 
+  // @ts-ignore
   sqlASTNode.args = getArgumentValues(field, queryASTNode, this.variableValues);
 
   // if list then mark flag true & get the type inside the GraphQLList container type
@@ -173,6 +199,7 @@ export function populateASTNode(
     queryASTNode = stripped.queryASTNode;
     // we'll set a flag for pagination.
     if (field.sqlPaginate) {
+      // @ts-ignore
       sqlASTNode.paginate = true;
     }
   } else if (field.sqlPaginate) {
@@ -203,7 +230,9 @@ export function populateASTNode(
       );
     }
     handleTable.call(
+      // @ts-ignore
       this,
+      // @ts-ignore
       sqlASTNode,
       queryASTNode,
       field,
@@ -217,24 +246,33 @@ export function populateASTNode(
     // is this a computed column from a raw expression?
   } else if (field.sqlExpr) {
     sqlASTNode.type = 'expression';
+    // @ts-ignore
     sqlASTNode.sqlExpr = field.sqlExpr;
+    // @ts-ignore
     let aliasFrom = (sqlASTNode.fieldName = field.name);
+    // @ts-ignore
     if (sqlASTNode.defferedFrom) {
       aliasFrom += '@' + parentTypeNode.name;
     }
+    // @ts-ignore
     sqlASTNode.as = namespace.generate('column', aliasFrom);
     // is it just a column? if they specified a sqlColumn or they didn't define a resolver, yeah
   } else if (field.sqlColumn || !field.resolve) {
     sqlASTNode.type = 'column';
+    // @ts-ignore
     sqlASTNode.name = field.sqlColumn || field.name;
+    // @ts-ignore
     let aliasFrom = (sqlASTNode.fieldName = field.name);
+    // @ts-ignore
     if (sqlASTNode.defferedFrom) {
       aliasFrom += '@' + parentTypeNode.name;
     }
+    // @ts-ignore
     sqlASTNode.as = namespace.generate('column', aliasFrom);
     // or maybe it just depends on some SQL columns
   } else if (field.sqlDeps) {
     sqlASTNode.type = 'columnDeps';
+    // @ts-ignore
     sqlASTNode.names = field.sqlDeps;
     // maybe this node wants no business with your SQL, because it has its own resolver
   } else {
@@ -242,40 +280,53 @@ export function populateASTNode(
   }
 }
 
-function handleTable(
-  sqlASTNode,
-  queryASTNode,
-  field,
-  gqlType,
-  namespace,
-  grabMany,
-  depth,
-  options,
-  context
+function handleTable<TContext>(
+  this: GraphQLResolveInfo,
+  sqlASTNode: SQLAst,
+  queryASTNode: FieldNode,
+  field: GraphQLField<any, any>,
+  gqlType: GraphQLOutputType,
+  namespace: AliasNamespace,
+  grabMany: boolean,
+  depth: number,
+  options: Options,
+  context: TContext
 ) {
+  // @ts-ignore
   const config = gqlType._typeConfig;
 
   sqlASTNode.type = 'table';
+  // @ts-ignore
   const sqlTable = unthunk(config.sqlTable, sqlASTNode.args || {}, context);
+  // @ts-ignore
   sqlASTNode.name = sqlTable;
 
   // the graphQL field name will be the default alias for the table
   // if thats taken, this function will just add an underscore to the end to make it unique
+  // @ts-ignore
   sqlASTNode.as = namespace.generate('table', field.name);
 
+  // @ts-ignore
   if (field.orderBy && !sqlASTNode.orderBy) {
+    // @ts-ignore
     sqlASTNode.orderBy = handleOrderBy(
+      // @ts-ignore
       unthunk(field.orderBy, sqlASTNode.args || {}, context)
     );
   }
 
   // tables have child fields, lets push them to an array
+  // @ts-ignore
   const children = (sqlASTNode.children = sqlASTNode.children || []);
 
+  // @ts-ignore
   sqlASTNode.fieldName = field.name;
+  // @ts-ignore
   sqlASTNode.grabMany = grabMany;
 
+  // @ts-ignore
   if (field.where) {
+    // @ts-ignore
     sqlASTNode.where = field.where;
   }
 
@@ -285,54 +336,77 @@ function handleTable(
    */
 
   // are they doing a one-to-many sql join?
+  // @ts-ignore
   if (field.sqlJoin) {
+    // @ts-ignore
     sqlASTNode.sqlJoin = field.sqlJoin;
     // or a many-to-many?
+    // @ts-ignore
   } else if (field.junction) {
     const junctionTable = unthunk(
+      // @ts-ignore
       ensure(field.junction, 'sqlTable'),
+      // @ts-ignore
       sqlASTNode.args || {},
       context
     );
+    // @ts-ignore
     const junction = (sqlASTNode.junction = {
       sqlTable: junctionTable,
       as: namespace.generate('table', junctionTable),
     });
+    // @ts-ignore
     if (field.junction.include) {
+      // @ts-ignore
       junction.include = unthunk(
+        // @ts-ignore
         field.junction.include,
+        // @ts-ignore
         sqlASTNode.args || {},
         context
       );
     }
 
+    // @ts-ignore
     if (field.junction.orderBy) {
+      // @ts-ignore
       junction.orderBy = handleOrderBy(
+        // @ts-ignore
         unthunk(field.junction.orderBy, sqlASTNode.args || {}, context)
       );
     }
 
+    // @ts-ignore
     if (field.junction.where) {
+      // @ts-ignore
       junction.where = field.junction.where;
     }
     // are they joining or batching?
+    // @ts-ignore
     if (field.junction.sqlJoins) {
+      // @ts-ignore
       junction.sqlJoins = field.junction.sqlJoins;
+      // @ts-ignore
     } else if (field.junction.sqlBatch) {
       children.push({
+        // @ts-ignore
         ...keyToASTChild(ensure(field.junction, 'uniqueKey'), namespace),
         fromOtherTable: junction.as,
       });
+      // @ts-ignore
       junction.sqlBatch = {
+        // @ts-ignore
         sqlJoin: ensure(field.junction.sqlBatch, 'sqlJoin'),
         thisKey: {
           ...columnToASTChild(
+            // @ts-ignore
             ensure(field.junction.sqlBatch, 'thisKey'),
             namespace
           ),
           fromOtherTable: junction.as,
         },
         parentKey: columnToASTChild(
+          // @ts-ignore
           ensure(field.junction.sqlBatch, 'parentKey'),
           namespace
         ),
@@ -341,21 +415,29 @@ function handleTable(
       throw new Error('junction requires either a `sqlJoins` or `sqlBatch`');
     }
     // or are they doing a one-to-many with batching
+    // @ts-ignore
   } else if (field.sqlBatch) {
+    // @ts-ignore
     sqlASTNode.sqlBatch = {
+      // @ts-ignore
       thisKey: columnToASTChild(ensure(field.sqlBatch, 'thisKey'), namespace),
       parentKey: columnToASTChild(
+        // @ts-ignore
         ensure(field.sqlBatch, 'parentKey'),
         namespace
       ),
     };
   }
 
+  // @ts-ignore
   if (field.limit) {
+    // @ts-ignore
     assert(field.orderBy, '`orderBy` is required with `limit`');
+    // @ts-ignore
     sqlASTNode.limit = unthunk(field.limit, sqlASTNode.args || {}, context);
   }
 
+  // @ts-ignore
   if (sqlASTNode.paginate) {
     getSortColumns(field, sqlASTNode, context);
   }
@@ -367,9 +449,11 @@ function handleTable(
 
   // the NestHydrationJS library only treats the first column as the unique identifier, therefore we
   // need whichever column that the schema specifies as the unique one to be the first child
+  // @ts-ignore
   children.push(keyToASTChild(ensure(config, 'uniqueKey'), namespace));
 
   if (config.alwaysFetch) {
+    // @ts-ignore
     for (let column of wrap(config.alwaysFetch)) {
       children.push(columnToASTChild(column, namespace));
     }
@@ -388,6 +472,7 @@ function handleTable(
   }
 
   // go handle the pagination information
+  // @ts-ignore
   if (sqlASTNode.paginate) {
     handleColumnsRequiredForPagination(sqlASTNode, namespace);
   }
@@ -399,8 +484,10 @@ function handleTable(
     ) {
       // union types have special rules for the child fields in join monster
       sqlASTNode.type = 'union';
+      // @ts-ignore
       sqlASTNode.typedChildren = {};
       handleUnionSelections.call(
+        // @ts-ignore
         this,
         sqlASTNode,
         children,
@@ -413,6 +500,7 @@ function handleTable(
       );
     } else {
       handleSelections.call(
+        // @ts-ignore
         this,
         sqlASTNode,
         children,
@@ -428,15 +516,16 @@ function handleTable(
 }
 
 // we need to collect all fields from all the fragments requested in the union type and ask for them in SQL
-function handleUnionSelections(
-  sqlASTNode,
-  children,
-  selections,
-  gqlType,
-  namespace,
-  depth,
-  options,
-  context,
+function handleUnionSelections<TContext>(
+  this: GraphQLResolveInfo,
+  sqlASTNode: SQLAst,
+  children: any[],
+  selections: ReadonlyArray<SelectionNode>,
+  gqlType: GraphQLOutputType,
+  namespace: AliasNamespace,
+  depth: number,
+  options: Options,
+  context: TContext,
   internalOptions = {}
 ) {
   for (let selection of selections) {
@@ -446,6 +535,7 @@ function handleUnionSelections(
         // has this field been requested once already? GraphQL does not protect against duplicates so we have to check for it
         const existingNode = children.find(
           (child) =>
+            // @ts-ignore
             child.fieldName === selection.name.value && child.type === 'table'
         );
         let newNode = new SQLASTNode(sqlASTNode);
@@ -454,12 +544,16 @@ function handleUnionSelections(
         } else {
           children.push(newNode);
         }
+        // @ts-ignore
         if (internalOptions.defferedFrom) {
+          // @ts-ignore
           newNode.defferedFrom = internalOptions.defferedFrom;
         }
         populateASTNode.call(
+          // @ts-ignore
           this,
           selection,
+          // @ts-ignore
           gqlType,
           newNode,
           namespace,
@@ -471,10 +565,12 @@ function handleUnionSelections(
       // if its an inline fragment, it has some fields and we gotta recurse thru all them
       case 'InlineFragment':
         {
+          // @ts-ignore
           const selectionNameOfType = selection.typeCondition.name.value;
           // normally, we would scan for the extra join-monster data on the current gqlType.
           // but the gqlType is the Union. The data isn't there, its on each of the types that make up the union
           // lets find that type and handle the selections based on THAT type instead
+          // @ts-ignore
           const deferredType = this.schema._typeMap[selectionNameOfType];
           const deferToObjectType =
             deferredType.constructor.name === 'GraphQLObjectType';
@@ -482,12 +578,15 @@ function handleUnionSelections(
             ? handleSelections
             : handleUnionSelections;
           if (deferToObjectType) {
+            // @ts-ignore
             const typedChildren = sqlASTNode.typedChildren;
             children = typedChildren[deferredType.name] =
               typedChildren[deferredType.name] || [];
+            // @ts-ignore
             internalOptions.defferedFrom = gqlType;
           }
           handler.call(
+            // @ts-ignore
             this,
             sqlASTNode,
             children,
@@ -505,8 +604,10 @@ function handleUnionSelections(
       case 'FragmentSpread':
         {
           const fragmentName = selection.name.value;
+          // @ts-ignore
           const fragment = this.fragments[fragmentName];
           const fragmentNameOfType = fragment.typeCondition.name.value;
+          // @ts-ignore
           const deferredType = this.schema._typeMap[fragmentNameOfType];
           const deferToObjectType =
             deferredType.constructor.name === 'GraphQLObjectType';
@@ -514,12 +615,15 @@ function handleUnionSelections(
             ? handleSelections
             : handleUnionSelections;
           if (deferToObjectType) {
+            // @ts-ignore
             const typedChildren = sqlASTNode.typedChildren;
             children = typedChildren[deferredType.name] =
               typedChildren[deferredType.name] || [];
+            // @ts-ignore
             internalOptions.defferedFrom = gqlType;
           }
           handler.call(
+            // @ts-ignore
             this,
             sqlASTNode,
             children,
@@ -535,21 +639,23 @@ function handleUnionSelections(
         break;
       /* istanbul ignore next */
       default:
+        // @ts-ignore
         throw new Error('Unknown selection kind: ' + selection.kind);
     }
   }
 }
 
 // the selections could be several types, recursively handle each type here
-function handleSelections(
-  sqlASTNode,
-  children,
-  selections,
-  gqlType,
-  namespace,
-  depth,
-  options,
-  context,
+function handleSelections<TContext>(
+  this: GraphQLResolveInfo,
+  sqlASTNode: SQLAst,
+  children: any[],
+  selections: ReadonlyArray<SelectionNode>,
+  gqlType: GraphQLOutputType,
+  namespace: AliasNamespace,
+  depth: number,
+  options: Options,
+  context: TContext,
   internalOptions = {}
 ) {
   for (let selection of selections) {
@@ -560,6 +666,7 @@ function handleSelections(
         // has this field been requested once already? GraphQL does not protect against duplicates so we have to check for it
         const existingNode = children.find(
           (child) =>
+            // @ts-ignore
             child.fieldName === selection.name.value && child.type === 'table'
         );
         let newNode = new SQLASTNode(sqlASTNode);
@@ -568,12 +675,16 @@ function handleSelections(
         } else {
           children.push(newNode);
         }
+        // @ts-ignore
         if (internalOptions.defferedFrom) {
+          // @ts-ignore
           newNode.defferedFrom = internalOptions.defferedFrom;
         }
         populateASTNode.call(
+          // @ts-ignore
           this,
           selection,
+          // @ts-ignore
           gqlType,
           newNode,
           namespace,
@@ -586,13 +697,18 @@ function handleSelections(
       case 'InlineFragment':
         {
           // check to make sure the type of this fragment (or one of the interfaces it implements) matches the type being queried
+          // @ts-ignore
           const selectionNameOfType = selection.typeCondition.name.value;
+          // @ts-ignore
           const sameType = selectionNameOfType === gqlType.name;
+          // @ts-ignore
           const interfaceType = (gqlType._interfaces || [])
+            // @ts-ignore
             .map((iface) => iface.name)
             .includes(selectionNameOfType);
           if (sameType || interfaceType) {
             handleSelections.call(
+              // @ts-ignore
               this,
               sqlASTNode,
               children,
@@ -611,16 +727,21 @@ function handleSelections(
       case 'FragmentSpread':
         {
           const fragmentName = selection.name.value;
+          // @ts-ignore
           const fragment = this.fragments[fragmentName];
           // make sure fragment type (or one of the interfaces it implements) matches the type being queried
           const fragmentNameOfType = fragment.typeCondition.name.value;
+          // @ts-ignore
           const sameType = fragmentNameOfType === gqlType.name;
           const interfaceType =
+            // @ts-ignore
             gqlType._interfaces
+              // @ts-ignore
               .map((iface) => iface.name)
               .indexOf(fragmentNameOfType) >= 0;
           if (sameType || interfaceType) {
             handleSelections.call(
+              // @ts-ignore
               this,
               sqlASTNode,
               children,
@@ -637,6 +758,7 @@ function handleSelections(
         break;
       /* istanbul ignore next */
       default:
+        // @ts-ignore
         throw new Error('Unknown selection kind: ' + selection.kind);
     }
   }
@@ -644,7 +766,7 @@ function handleSelections(
 
 // tell the AST we need a column that perhaps the user didnt ask for, but may be necessary for join monster to ID
 // objects or associate ones across batches
-function columnToASTChild(columnName, namespace) {
+function columnToASTChild(columnName: string, namespace: AliasNamespace) {
   return {
     type: 'column',
     name: columnName,
@@ -655,13 +777,13 @@ function columnToASTChild(columnName, namespace) {
 
 // generate a name for a composite key based on the individual column names smashed together
 // slice them to help prevent exceeding oracle's 30-char identifier limit
-function toClumsyName(keyArr) {
+function toClumsyName(keyArr: string[]) {
   return keyArr.map((name) => name.slice(0, 3)).join('#');
 }
 
 // keys are necessary for deduplication during the hydration process
 // this will handle singular or composite keys
-function keyToASTChild(key, namespace) {
+function keyToASTChild(key: string, namespace: AliasNamespace) {
   if (typeof key === 'string') {
     return columnToASTChild(key, namespace);
   }
@@ -676,71 +798,111 @@ function keyToASTChild(key, namespace) {
   }
 }
 
-function handleColumnsRequiredForPagination(sqlASTNode, namespace) {
+function handleColumnsRequiredForPagination(
+  sqlASTNode: SQLAst,
+  namespace: AliasNamespace
+) {
+  // @ts-ignore
   if (sqlASTNode.sortKey || idx(sqlASTNode, (_) => _.junction.sortKey)) {
+    // @ts-ignore
     const sortKey = sqlASTNode.sortKey || sqlASTNode.junction.sortKey;
     assert(sortKey.order, '"sortKey" must have "order"');
     // this type of paging uses the "sort key(s)". we need to get this in order to generate the cursor
+    // @ts-ignore
     for (let column of wrap(ensure(sortKey, 'key'))) {
       const newChild = columnToASTChild(column, namespace);
       // if this joining on a "through-table", the sort key is on the threw table instead of this node's parent table
+      // @ts-ignore
       if (!sqlASTNode.sortKey) {
+        // @ts-ignore
         newChild.fromOtherTable = sqlASTNode.junction.as;
       }
+      // @ts-ignore
       sqlASTNode.children.push(newChild);
     }
+    // @ts-ignore
   } else if (sqlASTNode.orderBy || idx(sqlASTNode, (_) => _.junction.orderBy)) {
     // this type of paging can visit arbitrary pages, so lets provide the total number of items
     // on this special "$total" column which we will compute in the query
     const newChild = columnToASTChild('$total', namespace);
+    // @ts-ignore
     if (sqlASTNode.junction) {
+      // @ts-ignore
       newChild.fromOtherTable = sqlASTNode.junction.as;
     }
+
+    // @ts-ignore
     sqlASTNode.children.push(newChild);
   }
 }
 
 // if its a connection type, we need to look up the Node type inside their to find the relevant SQL info
-function stripRelayConnection(gqlType, queryASTNode, fragments) {
+function stripRelayConnection(
+  gqlType: GraphQLOutputType,
+  queryASTNode: FieldNode,
+  fragments: GraphQLResolveInfo['fragments']
+) {
   // get the GraphQL Type inside the list of edges inside the Node from the schema definition
-  const edgeType = stripNonNullType(gqlType._fields.edges.type);
+  // @ts-ignore
+  const edgeType: GraphQLOutputType = stripNonNullType(
+    // @ts-ignore
+    gqlType._fields.edges.type
+  );
   const strippedType = stripNonNullType(
+    // @ts-ignore
     stripNonNullType(edgeType.ofType)._fields.node.type
   );
   // let's remember those arguments on the connection
   const args = queryASTNode.arguments;
   // and then find the fields being selected on the underlying type, also buried within edges and Node
   const edges = spreadFragments(
+    // @ts-ignore
     queryASTNode.selectionSet.selections,
     fragments,
+    // @ts-ignore
     gqlType.name
+    // @ts-ignore
   ).find((selection) => selection.name.value === 'edges');
   if (edges) {
+    // @ts-ignore
     queryASTNode =
       spreadFragments(
+        // @ts-ignore
         edges.selectionSet.selections,
         fragments,
+        // @ts-ignore
         gqlType.name
+        // @ts-ignore
       ).find((selection) => selection.name.value === 'node') || {};
   } else {
+    // @ts-ignore
     queryASTNode = {};
   }
   // place the arguments on this inner field, so our SQL AST picks it up later
+  // @ts-ignore
   queryASTNode.arguments = args;
   return {gqlType: strippedType, queryASTNode};
 }
 
-function stripNonNullType(type) {
+function stripNonNullType(type: GraphQLOutputType) {
+  // @ts-ignore
   return type.constructor.name === 'GraphQLNonNull' ? type.ofType : type;
 }
 
 // go through and make sure se only ask for each sqlDep once per table
-export function pruneDuplicateSqlDeps(sqlAST, namespace) {
+export function pruneDuplicateSqlDeps(
+  sqlAST: SQLAst,
+  namespace: AliasNamespace
+) {
   const childrenToLoopOver = [];
+  // @ts-ignore
   if (sqlAST.children) {
+    // @ts-ignore
     childrenToLoopOver.push(sqlAST.children);
   }
+  // @ts-ignore
   if (sqlAST.typedChildren) {
+    // @ts-ignore
     childrenToLoopOver.push(...Object.values(sqlAST.typedChildren));
   }
 
@@ -755,10 +917,14 @@ export function pruneDuplicateSqlDeps(sqlAST, namespace) {
       const child = children[i];
       if (child.type === 'columnDeps') {
         const keyName = child.fromOtherTable || '';
+        // @ts-ignore
         child.names.forEach((name) => {
+          // @ts-ignore
           if (!depsByTable[keyName]) {
+            // @ts-ignore
             depsByTable[keyName] = new Set();
           }
+          // @ts-ignore
           depsByTable[keyName].add(name);
         });
         children.splice(i, 1);
@@ -777,7 +943,9 @@ export function pruneDuplicateSqlDeps(sqlAST, namespace) {
         names: {},
         fromOtherTable: table || null,
       });
+      // @ts-ignore
       depsByTable[table].forEach((name) => {
+        // @ts-ignore
         newNode.names[name] = namespace.generate('column', name);
       });
       children.push(newNode);
@@ -785,6 +953,7 @@ export function pruneDuplicateSqlDeps(sqlAST, namespace) {
   }
 }
 
+// @ts-ignore
 function getSortColumns(field, sqlASTNode, context) {
   if (field.sortKey) {
     sqlASTNode.sortKey = unthunk(field.sortKey, sqlASTNode.args || {}, context);
@@ -821,9 +990,11 @@ function getSortColumns(field, sqlASTNode, context) {
       );
     }
   }
+  // @ts-ignore
   if (sqlASTNode.sortKey && idx(sqlASTNode, (_) => _.junction.sortKey)) {
     throw new Error('"sortKey" must be on junction or main table, not both');
   }
+  // @ts-ignore
   if (sqlASTNode.orderBy && idx(sqlASTNode, (_) => _.junction.orderBy)) {
     throw new Error('"orderBy" must be on junction or main table, not both');
   }
@@ -832,7 +1003,11 @@ function getSortColumns(field, sqlASTNode, context) {
 // instead of fields, selections can be fragments, which is another group of selections
 // fragments can be arbitrarily nested
 // this function recurses through and gets the relevant fields
-function spreadFragments(selections, fragments, typeName) {
+function spreadFragments(
+  selections: ReadonlyArray<SelectionNode>,
+  fragments: GraphQLResolveInfo['fragments'],
+  typeName: string
+): FieldNode[] {
   return flatMap(selections, (selection) => {
     switch (selection.kind) {
       case 'FragmentSpread':
@@ -844,6 +1019,7 @@ function spreadFragments(selections, fragments, typeName) {
           typeName
         );
       case 'InlineFragment':
+        // @ts-ignore
         if (selection.typeCondition.name.value === typeName) {
           return spreadFragments(
             selection.selectionSet.selections,
@@ -859,9 +1035,9 @@ function spreadFragments(selections, fragments, typeName) {
   });
 }
 
-export function handleOrderBy(orderBy) {
+export function handleOrderBy(orderBy?: OrderBy | string) {
   if (!orderBy) return undefined;
-  const orderColumns = {};
+  const orderColumns: OrderBy = {};
   if (typeof orderBy === 'object') {
     for (let column in orderBy) {
       let direction = orderBy[column].toUpperCase();

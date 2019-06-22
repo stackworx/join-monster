@@ -1,19 +1,22 @@
 import {filter} from 'lodash';
 import {cursorToOffset} from 'graphql-relay';
 import {wrap, cursorToObj, maybeQuote} from '../util';
+// @ts-ignore
 import idx from 'idx';
+import {SQLAst, Quote, DialectModule} from '../types';
 
-export function joinPrefix(prefix) {
+export function joinPrefix(prefix: string[]) {
   return prefix
     .slice(1)
     .map((name) => name + '__')
     .join('');
 }
 
-export function generateCastExpressionFromValueType(key, val) {
+export function generateCastExpressionFromValueType(key: string, val: any) {
   const castTypes = {
     string: 'TEXT',
   };
+  // @ts-ignore
   const type = castTypes[typeof val] || null;
 
   if (type) {
@@ -22,31 +25,35 @@ export function generateCastExpressionFromValueType(key, val) {
   return key;
 }
 
-function doubleQuote(str) {
+function doubleQuote(str: string) {
   return `"${str}"`;
 }
 
-export function thisIsNotTheEndOfThisBatch(node, parent) {
+export function thisIsNotTheEndOfThisBatch(node: SQLAst, parent: SQLAst) {
+  // @ts-ignore
   return (!node.sqlBatch && !idx(node, (_) => _.junction.sqlBatch)) || !parent;
 }
 
 export function whereConditionIsntSupposedToGoInsideSubqueryOrOnNextBatch(
-  node,
-  parent
+  node: SQLAst,
+  parent: SQLAst
 ) {
   return (
+    // @ts-ignore
     !node.paginate &&
+    // @ts-ignore
     (!(node.sqlBatch || idx(node, (_) => _.junction.sqlBatch)) || !parent)
   );
 }
 
 export function keysetPagingSelect(
-  table,
-  whereCondition,
-  order,
-  limit,
-  as,
-  options = {}
+  table: string,
+  whereCondition: any,
+  order: any,
+  limit: any,
+  as: string,
+  // TODO: type
+  options: any = {}
 ) {
   let {joinCondition, joinType, extraJoin, q} = options;
   q = q || doubleQuote;
@@ -78,13 +85,13 @@ FROM (
 }
 
 export function offsetPagingSelect(
-  table,
-  pagingWhereConditions,
-  order,
-  limit,
-  offset,
-  as,
-  options = {}
+  table: string,
+  pagingWhereConditions: any,
+  order: any,
+  limit: any,
+  offset: any,
+  as: any,
+  options: any = {}
 ) {
   let {joinCondition, joinType, extraJoin, q} = options;
   q = q || doubleQuote;
@@ -115,7 +122,7 @@ FROM (
 ) ${q(as)}`;
 }
 
-export function orderColumnsToString(orderColumns, q, as) {
+export function orderColumnsToString(orderColumns: any, q: Quote, as: string) {
   const conditions = [];
   for (let column in orderColumns) {
     conditions.push(
@@ -126,8 +133,9 @@ export function orderColumnsToString(orderColumns, q, as) {
 }
 
 // find out what the limit, offset, order by parts should be from the relay connection args if we're paginating
-export function interpretForOffsetPaging(node, dialect) {
+export function interpretForOffsetPaging(node: SQLAst, dialect: DialectModule) {
   const {name} = dialect;
+  // @ts-ignore
   if (idx(node, (_) => _.args.last)) {
     throw new Error(
       'Backward pagination not supported with offsets. Consider using keyset pagination instead'
@@ -135,11 +143,16 @@ export function interpretForOffsetPaging(node, dialect) {
   }
 
   const order = {};
+  // @ts-ignore
   if (node.orderBy) {
+    // @ts-ignore
     order.table = node.as;
+    // @ts-ignore
     order.columns = node.orderBy;
   } else {
+    // @ts-ignore
     order.table = node.junction.as;
+    // @ts-ignore
     order.columns = node.junction.orderBy;
   }
 
@@ -147,49 +160,68 @@ export function interpretForOffsetPaging(node, dialect) {
     ? '18446744073709551615'
     : 'ALL';
   let offset = 0;
+  // @ts-ignore
   if (idx(node, (_) => _.args.first)) {
+    // @ts-ignore
     limit = parseInt(node.args.first, 10);
     // we'll get one extra item (hence the +1). this is to determine if there is a next page or not
+    // @ts-ignore
     if (node.paginate) {
+      // @ts-ignore
       limit++;
     }
+    // @ts-ignore
     if (node.args.after) {
+      // @ts-ignore
       offset = cursorToOffset(node.args.after) + 1;
     }
   }
   return {limit, offset, order};
 }
 
-export function interpretForKeysetPaging(node, dialect) {
+export function interpretForKeysetPaging(node: SQLAst, dialect: DialectModule) {
   const {name} = dialect;
 
   let sortTable;
   let sortKey;
   let descending;
   const order = {columns: {}};
+  // @ts-ignore
   if (node.sortKey) {
+    // @ts-ignore
     sortKey = node.sortKey;
     descending = sortKey.order.toUpperCase() === 'DESC';
+    // @ts-ignore
     sortTable = node.as;
     // flip the sort order if doing backwards paging
+    // @ts-ignore
     if (idx(node, (_) => _.args.last)) {
       descending = !descending;
     }
+    // @ts-ignore
     for (let column of wrap(sortKey.key)) {
+      // @ts-ignore
       order.columns[column] = descending ? 'DESC' : 'ASC';
     }
+    // @ts-ignore
     order.table = node.as;
   } else {
+    // @ts-ignore
     sortKey = node.junction.sortKey;
     descending = sortKey.order.toUpperCase() === 'DESC';
+    // @ts-ignore
     sortTable = node.junction.as;
     // flip the sort order if doing backwards paging
+    // @ts-ignore
     if (idx(node, (_) => _.args.last)) {
       descending = !descending;
     }
+    // @ts-ignore
     for (let column of wrap(sortKey.key)) {
+      // @ts-ignore
       order.columns[column] = descending ? 'DESC' : 'ASC';
     }
+    // @ts-ignore
     order.table = node.junction.as;
   }
 
@@ -197,9 +229,13 @@ export function interpretForKeysetPaging(node, dialect) {
     ? '18446744073709551615'
     : 'ALL';
   let whereCondition = '';
+  // @ts-ignore
   if (idx(node, (_) => _.args.first)) {
+    // @ts-ignore
     limit = parseInt(node.args.first, 10) + 1;
+    // @ts-ignore
     if (node.args.after) {
+      // @ts-ignore
       const cursorObj = cursorToObj(node.args.after);
       validateCursor(cursorObj, wrap(sortKey.key));
       whereCondition = sortKeyToWhereCondition(
@@ -209,12 +245,17 @@ export function interpretForKeysetPaging(node, dialect) {
         dialect
       );
     }
+    // @ts-ignore
     if (node.args.before) {
       throw new Error('Using "before" with "first" is nonsensical.');
     }
+    // @ts-ignore
   } else if (idx(node, (_) => _.args.last)) {
+    // @ts-ignore
     limit = parseInt(node.args.last, 10) + 1;
+    // @ts-ignore
     if (node.args.before) {
+      // @ts-ignore
       const cursorObj = cursorToObj(node.args.before);
       validateCursor(cursorObj, wrap(sortKey.key));
       whereCondition = sortKeyToWhereCondition(
@@ -224,6 +265,7 @@ export function interpretForKeysetPaging(node, dialect) {
         dialect
       );
     }
+    // @ts-ignore
     if (node.args.after) {
       throw new Error('Using "after" with "last" is nonsensical.');
     }
@@ -233,7 +275,7 @@ export function interpretForKeysetPaging(node, dialect) {
 }
 
 // the cursor contains the sort keys. it needs to match the keys specified in the `sortKey` on this field in the schema
-export function validateCursor(cursorObj, expectedKeys) {
+export function validateCursor(cursorObj: any, expectedKeys: any) {
   const actualKeys = Object.keys(cursorObj);
   const expectedKeySet = new Set(expectedKeys);
   const actualKeySet = new Set(actualKeys);
@@ -254,7 +296,12 @@ export function validateCursor(cursorObj, expectedKeys) {
 }
 
 // take the sort key and translate that for the where clause
-function sortKeyToWhereCondition(keyObj, descending, sortTable, dialect) {
+function sortKeyToWhereCondition(
+  keyObj: any,
+  descending: boolean,
+  sortTable: string,
+  dialect: DialectModule
+) {
   const {name, quote: q} = dialect;
   const sortColumns = [];
   const sortValues = [];
@@ -268,12 +315,17 @@ function sortKeyToWhereCondition(keyObj, descending, sortTable, dialect) {
     : `(${sortColumns.join(', ')}) ${operator} (${sortValues.join(', ')})`;
 }
 
-function recursiveWhereJoin(columns, values, op) {
+function recursiveWhereJoin(columns: string[], values: any[], op: '<' | '>') {
   const condition = `${columns.pop()} ${op} ${values.pop()}`;
   return _recursiveWhereJoin(columns, values, op, condition);
 }
 
-function _recursiveWhereJoin(columns, values, op, condition) {
+function _recursiveWhereJoin(
+  columns: string[],
+  values: any[],
+  op: '<' | '>',
+  condition: string
+): string {
   if (!columns.length) {
     return condition;
   }

@@ -1,16 +1,19 @@
 import {chain} from 'lodash';
 import {isEmptyArray} from './util';
+import {SQLAst} from './types';
 
 // union types have additional processing. the field names have a @ and the typename appended to them.
 // need to strip those off and take whichever of those values are non-null
-export default function resolveUnions(data, sqlAST) {
+export default function resolveUnions(data: any, sqlAST: SQLAst) {
   if (!data || (Array.isArray(data) && data.length === 0)) {
     return;
   }
 
   if (sqlAST.type === 'union') {
+    // @ts-ignore
     for (let typeName in sqlAST.typedChildren) {
       const suffix = '@' + typeName;
+      // @ts-ignore
       const children = sqlAST.typedChildren[typeName];
       for (let child of children) {
         const fieldName = child.fieldName;
@@ -57,9 +60,12 @@ export default function resolveUnions(data, sqlAST) {
   if (sqlAST.type === 'table' || sqlAST.type === 'union') {
     for (let child of sqlAST.children) {
       if (
+        // @ts-ignore
         (child.type === 'table' || child.type === 'union') &&
+        // @ts-ignore
         !child.sqlBatch
       ) {
+        // @ts-ignore
         const fieldName = child.fieldName;
         if (Array.isArray(data)) {
           const nextLevelData = chain(data)
@@ -67,8 +73,10 @@ export default function resolveUnions(data, sqlAST) {
             .flatMap((obj) => obj[fieldName])
             .filter((obj) => obj != null)
             .value();
+          // @ts-ignore
           resolveUnions(nextLevelData, child);
         } else {
+          // @ts-ignore
           resolveUnions(data[fieldName], child);
         }
       }
