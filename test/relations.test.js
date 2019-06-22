@@ -1,8 +1,6 @@
-import test from 'ava';
 import {graphql} from 'graphql';
 import schemaBasic from '../test-api/schema-basic/index';
 import {partial} from 'lodash';
-import {errCheck} from './helpers/_util';
 
 function wrap(query, id) {
   if (id) {
@@ -17,11 +15,11 @@ function wrap(query, id) {
 
 const run = partial(graphql, schemaBasic);
 
-test('should join a one-to-many relation', async (t) => {
+test('should join a one-to-many relation', async () => {
   const query = wrap('id, comments { id, body }');
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         id: 1,
@@ -77,10 +75,10 @@ test('should join a one-to-many relation', async (t) => {
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should join on a nested relation', async (t) => {
+test('should join on a nested relation', async () => {
   const query = wrap(`
     comments {
       id
@@ -89,8 +87,8 @@ test('should join on a nested relation', async (t) => {
     }
   `);
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         comments: [
@@ -152,10 +150,10 @@ test('should join on a nested relation', async (t) => {
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should handle where conditions on the relations', async (t) => {
+test('should handle where conditions on the relations', async () => {
   const query = wrap(
     `
     posts(active: true) {
@@ -178,8 +176,8 @@ test('should handle where conditions on the relations', async (t) => {
     2
   );
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       posts: [
         {
@@ -204,10 +202,10 @@ test('should handle where conditions on the relations', async (t) => {
       comments: [],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should handle where condition on many-to-many relation', async (t) => {
+test('should handle where condition on many-to-many relation', async () => {
   const query = wrap(
     `
     id
@@ -219,18 +217,18 @@ test('should handle where condition on many-to-many relation', async (t) => {
     3
   );
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       id: 3,
       fullName: 'foo bar',
       following: [{fullName: 'matt elder'}],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should include data from the junction table', async (t) => {
+test('should include data from the junction table', async () => {
   const query = wrap(
     `
     id
@@ -246,8 +244,8 @@ test('should include data from the junction table', async (t) => {
     3
   );
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       id: 3,
       fullName: 'foo bar',
@@ -269,10 +267,10 @@ test('should include data from the junction table', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should handle where condition on junction in many-to-many', async (t) => {
+test('should handle where condition on junction in many-to-many', async () => {
   const query = wrap(
     `
     id
@@ -285,8 +283,8 @@ test('should handle where condition on junction in many-to-many', async (t) => {
     3
   );
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       id: 3,
       fullName: 'foo bar',
@@ -298,10 +296,10 @@ test('should handle where condition on junction in many-to-many', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should handle joins with the same table name', async (t) => {
+test('should handle joins with the same table name', async () => {
   const query = wrap(`
     idEncoded
     globalId
@@ -319,8 +317,8 @@ test('should handle joins with the same table name', async (t) => {
     }
   `);
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         idEncoded: 'MQ==',
@@ -479,18 +477,18 @@ test('should handle joins with the same table name', async (t) => {
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should handle many to many relationship', async (t) => {
+test('it should handle many to many relationship', async () => {
   const query = wrap(`
     id
     fullName
     following { fullName }
   `);
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         id: 1,
@@ -520,10 +518,10 @@ test('it should handle many to many relationship', async (t) => {
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should handle fragments nested lower', async (t) => {
+test('it should handle fragments nested lower', async () => {
   const query = `
     {
       users {
@@ -541,8 +539,8 @@ test('it should handle fragments nested lower', async (t) => {
     fragment F3 on Comment { body }
   `;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         id: 1,
@@ -629,10 +627,10 @@ test('it should handle fragments nested lower', async (t) => {
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('should handle a correlated subquery', async (t) => {
+test('should handle a correlated subquery', async () => {
   const query = wrap(
     `
     posts(active: false) {
@@ -645,8 +643,8 @@ test('should handle a correlated subquery', async (t) => {
     2
   );
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       posts: [
         {
@@ -664,5 +662,5 @@ test('should handle a correlated subquery', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });

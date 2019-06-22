@@ -25,7 +25,7 @@ if (process.env.NODE_ENV !== 'test') {
   client = 'oracledb';
 }
 
-console.log('connection to', {client, connection});
+// console.log('connection to', {client, connection});
 export default require('knex')({
   client,
   connection,

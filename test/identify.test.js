@@ -1,8 +1,6 @@
-import test from 'ava';
 import {graphql} from 'graphql';
 import schemaBasic from '../test-api/schema-basic/index';
 import {partial} from 'lodash';
-import {errCheck} from './helpers/_util';
 
 function wrap(query) {
   return `{
@@ -12,39 +10,39 @@ function wrap(query) {
 
 const run = partial(graphql, schemaBasic);
 
-test('it should handle a where condition', async (t) => {
+test('it should handle a where condition', async () => {
   const query = `{
     user(id: 1) {
       fullName
     }
   }`;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {fullName: 'andrew carlson'},
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should handle an async where condition', async (t) => {
+test('it should handle an async where condition', async () => {
   const query = `{
     user(idAsync: 1) {
       fullName
     }
   }`;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {fullName: 'andrew carlson'},
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('a query with a sqlDeps as the first requested field should not mess it up', async (t) => {
+test('a query with a sqlDeps as the first requested field should not mess it up', async () => {
   const query = wrap('numFeet, fullName, id');
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     users: [
       {
         numFeet: 2,
@@ -63,18 +61,18 @@ test('a query with a sqlDeps as the first requested field should not mess it up'
       },
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should handle a single object in which the first requested field is a list', async (t) => {
+test('it should handle a single object in which the first requested field is a list', async () => {
   const query = `{
     user(id: 2) {
       posts { id, body }
     }
   }`;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       posts: [
         {
@@ -88,18 +86,18 @@ test('it should handle a single object in which the first requested field is a l
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should handle composite keys', async (t) => {
+test('it should handle composite keys', async () => {
   const query = `{
     sponsors {
       numLegs, lastName
     }
   }`;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     sponsors: [
       {numLegs: 2, lastName: 'bachman'},
       {numLegs: 2, lastName: 'bachman'},
@@ -108,5 +106,5 @@ test('it should handle composite keys', async (t) => {
       {numLegs: 2, lastName: 'daemon'},
     ],
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
