@@ -1,12 +1,10 @@
-import test from 'ava';
 import {graphql} from 'graphql';
 import schemaBasic from '../test-api/schema-basic/index';
 import {partial} from 'lodash';
-import {errCheck} from './helpers/_util';
 
 const run = partial(graphql, schemaBasic);
 
-test('should handle data from the junction table', async (t) => {
+test('should handle data from the junction table', async () => {
   const query = `{
     user(id: 3) {
       fullName
@@ -17,8 +15,8 @@ test('should handle data from the junction table', async (t) => {
     }
   }`;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       fullName: 'foo bar',
       following: [
@@ -33,5 +31,5 @@ test('should handle data from the junction table', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });

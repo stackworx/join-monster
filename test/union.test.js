@@ -1,12 +1,10 @@
-import test from 'ava';
 import {graphql} from 'graphql';
 import schemaBasic from '../test-api/schema-basic/index';
 import {partial} from 'lodash';
-import {errCheck} from './helpers/_util';
 
 const run = partial(graphql, schemaBasic);
 
-test('it should a union type', async (t) => {
+test('it should a union type', async () => {
   const query = `
     {
       user(id: 1) {
@@ -33,8 +31,8 @@ test('it should a union type', async (t) => {
     }
   `;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       writtenMaterial1: [
         {
@@ -79,10 +77,10 @@ test('it should a union type', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
 
-test('it should an interface type', async (t) => {
+test('it should an interface type', async () => {
   const query = `
     {
       user(id: 1) {
@@ -102,8 +100,8 @@ test('it should an interface type', async (t) => {
     }
   `;
   const {data, errors} = await run(query);
-  errCheck(t, errors);
-  const expect = {
+  expect(errors).toBeUndefined();
+  const expected = {
     user: {
       writtenMaterial2: [
         {
@@ -148,5 +146,5 @@ test('it should an interface type', async (t) => {
       ],
     },
   };
-  t.deepEqual(expect, data);
+  expect(expected).toEqual(data);
 });
