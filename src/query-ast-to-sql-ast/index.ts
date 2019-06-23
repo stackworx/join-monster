@@ -3,12 +3,37 @@ import {flatMap} from 'lodash';
 import deprecate from 'deprecate';
 import {getArgumentValues} from 'graphql/execution/values';
 import idx from 'idx';
+import {
+  GraphQLResolveInfo,
+  FieldNode,
+  GraphQLOutputType,
+  GraphQLNullableType,
+  isListType,
+  isObjectType,
+  GraphQLObjectType,
+  isNonNullType,
+  isCompositeType,
+  isUnionType,
+  isInterfaceType,
+  GraphQLCompositeType,
+} from 'graphql';
 
 import AliasNamespace from '../alias-namespace';
 import {wrap, ensure, unthunk, inspect} from '../util';
+import {
+  JoinMonsterOptions,
+  SQL_AST,
+  JoinMonsterFieldConfig,
+  Table_SQL_AST,
+  Column_SQL_AST,
+  Composite_SQL_AST,
+  Union_SQL_AST,
+  ColumnDeps_SQL_AST,
+  JoinMonsterObjectExtensions,
+} from '../types';
 
 class SQLASTNode {
-  constructor(parentNode, props) {
+  constructor(parentNode: any, props?: any) {
     Object.defineProperty(this, 'parent', {
       enumerable: false,
       value: parentNode,
@@ -19,13 +44,6 @@ class SQLASTNode {
     }
   }
 }
-
-// an enumeration of all the types that can map to SQL tables
-const TABLE_TYPES = [
-  'GraphQLObjectType',
-  'GraphQLUnionType',
-  'GraphQLInterfaceType',
-];
 
 function mergeAll(fieldNodes) {
   const newFieldNodes = [...fieldNodes];
@@ -48,7 +66,11 @@ function merge(dest, src) {
   };
 }
 
-export function queryASTToSqlAST(resolveInfo, options, context) {
+export function queryASTToSqlAST<TContext>(
+  resolveInfo: GraphQLResolveInfo,
+  options: JoinMonsterOptions,
+  context: TContext
+) {
   // this is responsible for all the logic regarding creating SQL aliases
   // we need varying degrees of uniqueness and readability
   // force oracle to minify, because it has this 30-character limit on column identifiers
@@ -57,10 +79,13 @@ export function queryASTToSqlAST(resolveInfo, options, context) {
   );
 
   // we'll build up the AST representing the SQL recursively
-  const sqlAST = {};
+  const sqlAST: any = {};
 
   // v0.8 changed the "fieldASTs" property to "fieldNodes". we want to support both
-  let fieldNodes = resolveInfo.fieldNodes || resolveInfo.fieldASTs;
+  let fieldNodes: GraphQLResolveInfo['fieldNodes'] =
+    // Valid ignore, need to increase graphql minimum requirement
+    // @ts-ignore
+    resolveInfo.fieldNodes || resolveInfo.fieldASTs;
 
   // fieldNodes is usually an array of 1 GraphQL node. If a field is requested twice *without* aliases, both nodes will be in this array
   // we need to merge it into one
@@ -100,14 +125,15 @@ export function queryASTToSqlAST(resolveInfo, options, context) {
   return sqlAST;
 }
 
-export function populateASTNode(
-  queryASTNode,
-  parentTypeNode,
-  sqlASTNode,
-  namespace,
-  depth,
-  options,
-  context
+export function populateASTNode<TContext>(
+  this: GraphQLResolveInfo,
+  queryASTNode: FieldNode,
+  parentTypeNode: GraphQLObjectType,
+  sqlASTNode: any,
+  namespace: AliasNamespace,
+  depth: number,
+  options: JoinMonsterOptions,
+  context: TContext
 ) {
   // first, get the name of the field being queried
   const fieldName = queryASTNode.name.value;
@@ -119,7 +145,7 @@ export function populateASTNode(
   }
 
   // then, get the field from the schema definition
-  let field = parentTypeNode.getFields()[fieldName];
+  let field: JoinMonsterFieldConfig = parentTypeNode.getFields()[fieldName];
   if (!field) {
     throw new Error(
       `The field "${fieldName}" is not in the ${parentTypeNode.name} type.`
@@ -150,18 +176,19 @@ export function populateASTNode(
   sqlASTNode.args = getArgumentValues(field, queryASTNode, this.variableValues);
 
   // if list then mark flag true & get the type inside the GraphQLList container type
-  if (gqlType.constructor.name === 'GraphQLList') {
+  if (isListType(gqlType)) {
     gqlType = stripNonNullType(gqlType.ofType);
     grabMany = true;
   }
 
   // if its a relay connection, there are several things we need to do
   if (
-    gqlType.constructor.name === 'GraphQLObjectType' &&
+    isObjectType(gqlType) &&
     gqlType.getFields().edges &&
     gqlType.getFields().pageInfo
   ) {
     grabMany = true;
+
     // grab the types and fields inside the connection
     const stripped = stripRelayConnection(
       gqlType,
@@ -169,7 +196,7 @@ export function populateASTNode(
       this.fragments
     );
     // reassign those
-    gqlType = stripNonNullType(stripped.gqlType);
+    gqlType = stripped.gqlType;
     queryASTNode = stripped.queryASTNode;
     // we'll set a flag for pagination.
     if (field.sqlPaginate) {
@@ -177,21 +204,21 @@ export function populateASTNode(
     }
   } else if (field.sqlPaginate) {
     throw new Error(
-      `To paginate the ${gqlType.name} type, it must be a GraphQLObjectType that fulfills the relay spec.
+      `To paginate the ${gqlType.inspect()} type, it must be a GraphQLObjectType that fulfills the relay spec.
       The type must have a "pageInfo" and "edges" field. https://facebook.github.io/relay/graphql/connections.htm`
     );
   }
   // the typeConfig has all the keyes from the GraphQLObjectType definition
-  const config = gqlType._typeConfig;
+  // Valid ignore, interval object
+  // @ts-ignore
+  const config: JoinMonsterObjectExtensions = gqlType._typeConfig;
 
   // is this a table in SQL?
-  if (
-    !field.jmIgnoreTable &&
-    TABLE_TYPES.includes(gqlType.constructor.name) &&
-    config.sqlTable
-  ) {
+  if (!field.jmIgnoreTable && isCompositeType(gqlType) && config.sqlTable) {
     if (depth >= 1) {
       assert(
+        // Valid ignore, invalid api usage check
+        // @ts-ignore
         !field.junctionTable,
         '"junctionTable" has been replaced with a new API.'
       );
@@ -243,9 +270,10 @@ export function populateASTNode(
 }
 
 function handleTable(
-  sqlASTNode,
-  queryASTNode,
-  field,
+  this: GraphQLResolveInfo,
+  sqlASTNode: Partial<Table_SQL_AST> | Partial<Union_SQL_AST>,
+  queryASTNode: FieldNode,
+  field: JoinMonsterFieldConfig,
   gqlType,
   namespace,
   grabMany,
@@ -294,7 +322,7 @@ function handleTable(
       sqlASTNode.args || {},
       context
     );
-    const junction = (sqlASTNode.junction = {
+    const junction: Table_SQL_AST['junction'] = (sqlASTNode.junction = {
       sqlTable: junctionTable,
       as: namespace.generate('table', junctionTable),
     });
@@ -377,12 +405,7 @@ function handleTable(
 
   // this was created for helping resolve types in union types
   // its been generalized to `alwaysFetch`, as its a useful feature for more than just unions
-  if (
-    config.typeHint &&
-    ['GraphQLUnionType', 'GraphQLInterfaceType'].includes(
-      gqlType.constructor.name
-    )
-  ) {
+  if (config.typeHint && (isUnionType(gqlType) || isInterfaceType(gqlType))) {
     deprecate('`typeHint` is deprecated. Use `alwaysFetch` instead.');
     children.push(columnToASTChild(config.typeHint, namespace));
   }
@@ -393,12 +416,10 @@ function handleTable(
   }
 
   if (queryASTNode.selectionSet) {
-    if (
-      gqlType.constructor.name === 'GraphQLUnionType' ||
-      gqlType.constructor.name === 'GraphQLInterfaceType'
-    ) {
+    if (isUnionType(gqlType) || isInterfaceType(gqlType)) {
       // union types have special rules for the child fields in join monster
       sqlASTNode.type = 'union';
+      // @ts-ignore
       sqlASTNode.typedChildren = {};
       handleUnionSelections.call(
         this,
@@ -429,6 +450,7 @@ function handleTable(
 
 // we need to collect all fields from all the fragments requested in the union type and ask for them in SQL
 function handleUnionSelections(
+  this: GraphQLResolveInfo,
   sqlASTNode,
   children,
   selections,
@@ -437,7 +459,7 @@ function handleUnionSelections(
   depth,
   options,
   context,
-  internalOptions = {}
+  internalOptions: {defferedFrom?: string} = {}
 ) {
   for (let selection of selections) {
     // we need to figure out what kind of selection this is
@@ -455,6 +477,7 @@ function handleUnionSelections(
           children.push(newNode);
         }
         if (internalOptions.defferedFrom) {
+          // @ts-ignore
           newNode.defferedFrom = internalOptions.defferedFrom;
         }
         populateASTNode.call(
@@ -476,8 +499,7 @@ function handleUnionSelections(
           // but the gqlType is the Union. The data isn't there, its on each of the types that make up the union
           // lets find that type and handle the selections based on THAT type instead
           const deferredType = this.schema.getTypeMap()[selectionNameOfType];
-          const deferToObjectType =
-            deferredType.constructor.name === 'GraphQLObjectType';
+          const deferToObjectType = isObjectType(deferredType);
           const handler = deferToObjectType
             ? handleSelections
             : handleUnionSelections;
@@ -508,8 +530,7 @@ function handleUnionSelections(
           const fragment = this.fragments[fragmentName];
           const fragmentNameOfType = fragment.typeCondition.name.value;
           const deferredType = this.schema.getTypeMap()[fragmentNameOfType];
-          const deferToObjectType =
-            deferredType.constructor.name === 'GraphQLObjectType';
+          const deferToObjectType = isObjectType(deferredType);
           const handler = deferToObjectType
             ? handleSelections
             : handleUnionSelections;
@@ -542,6 +563,7 @@ function handleUnionSelections(
 
 // the selections could be several types, recursively handle each type here
 function handleSelections(
+  this: GraphQLResolveInfo,
   sqlASTNode,
   children,
   selections,
@@ -550,7 +572,7 @@ function handleSelections(
   depth,
   options,
   context,
-  internalOptions = {}
+  internalOptions: {defferedFrom?: string} = {}
 ) {
   for (let selection of selections) {
     // we need to figure out what kind of selection this is
@@ -569,6 +591,7 @@ function handleSelections(
           children.push(newNode);
         }
         if (internalOptions.defferedFrom) {
+          // @ts-ignore
           newNode.defferedFrom = internalOptions.defferedFrom;
         }
         populateASTNode.call(
@@ -645,7 +668,7 @@ function handleSelections(
 
 // tell the AST we need a column that perhaps the user didnt ask for, but may be necessary for join monster to ID
 // objects or associate ones across batches
-function columnToASTChild(columnName, namespace) {
+function columnToASTChild(columnName, namespace): Column_SQL_AST {
   return {
     type: 'column',
     name: columnName,
@@ -656,13 +679,16 @@ function columnToASTChild(columnName, namespace) {
 
 // generate a name for a composite key based on the individual column names smashed together
 // slice them to help prevent exceeding oracle's 30-char identifier limit
-function toClumsyName(keyArr) {
+function toClumsyName(keyArr): string {
   return keyArr.map((name) => name.slice(0, 3)).join('#');
 }
 
 // keys are necessary for deduplication during the hydration process
 // this will handle singular or composite keys
-function keyToASTChild(key, namespace) {
+function keyToASTChild(
+  key: string | string[],
+  namespace
+): Column_SQL_AST | Composite_SQL_AST {
   if (typeof key === 'string') {
     return columnToASTChild(key, namespace);
   }
@@ -675,6 +701,7 @@ function keyToASTChild(key, namespace) {
       as: namespace.generate('column', clumsyName),
     };
   }
+  throw new Error(`Invalid Key Object: ${key}`);
 }
 
 function handleColumnsRequiredForPagination(sqlASTNode, namespace) {
@@ -702,12 +729,36 @@ function handleColumnsRequiredForPagination(sqlASTNode, namespace) {
 }
 
 // if its a connection type, we need to look up the Node type inside their to find the relevant SQL info
-function stripRelayConnection(gqlType, queryASTNode, fragments) {
+function stripRelayConnection(
+  gqlType: GraphQLObjectType,
+  queryASTNode,
+  fragments
+): {gqlType: GraphQLCompositeType; queryASTNode: any} {
   // get the GraphQL Type inside the list of edges inside the Node from the schema definition
-  const edgeType = stripNonNullType(gqlType.getFields().edges.type);
-  const strippedType = stripNonNullType(
-    stripNonNullType(edgeType.ofType).getFields().node.type
-  );
+  const edgeListType = stripNonNullType(gqlType.getFields().edges.type);
+
+  if (!isListType(edgeListType)) {
+    throw new Error(
+      `Invalid Relay Connection type: ${edgeListType.inspect()}.`
+    );
+  }
+
+  const edgeType = stripNonNullType(edgeListType.ofType);
+
+  if (!isObjectType(edgeType)) {
+    throw new Error(
+      `Invalid Relay Connection Edge type: ${edgeListType.inspect()}.`
+    );
+  }
+
+  const strippedType = stripNonNullType(edgeType.getFields().node.type);
+
+  if (!isCompositeType(strippedType)) {
+    throw new Error(
+      `Relay Connection Node must be composite type: ${strippedType.inspect()}`
+    );
+  }
+
   // let's remember those arguments on the connection
   const args = queryASTNode.arguments;
   // and then find the fields being selected on the underlying type, also buried within edges and Node
@@ -731,17 +782,20 @@ function stripRelayConnection(gqlType, queryASTNode, fragments) {
   return {gqlType: strippedType, queryASTNode};
 }
 
-function stripNonNullType(type) {
-  return type.constructor.name === 'GraphQLNonNull' ? type.ofType : type;
+function stripNonNullType(type: GraphQLOutputType): GraphQLNullableType {
+  if (isNonNullType(type)) {
+    return type.ofType;
+  }
+  return type;
 }
 
 // go through and make sure se only ask for each sqlDep once per table
-export function pruneDuplicateSqlDeps(sqlAST, namespace) {
-  const childrenToLoopOver = [];
-  if (sqlAST.children) {
+export function pruneDuplicateSqlDeps(sqlAST: SQL_AST, namespace) {
+  const childrenToLoopOver: SQL_AST[][] = [];
+  if ((sqlAST.type === 'table' || sqlAST.type === 'union') && sqlAST.children) {
     childrenToLoopOver.push(sqlAST.children);
   }
-  if (sqlAST.typedChildren) {
+  if (sqlAST.type === 'union' && sqlAST.typedChildren) {
     childrenToLoopOver.push(...Object.values(sqlAST.typedChildren));
   }
 
@@ -756,6 +810,7 @@ export function pruneDuplicateSqlDeps(sqlAST, namespace) {
       const child = children[i];
       if (child.type === 'columnDeps') {
         const keyName = child.fromOtherTable || '';
+        // @ts-ignore
         child.names.forEach((name) => {
           if (!depsByTable[keyName]) {
             depsByTable[keyName] = new Set();
@@ -773,15 +828,16 @@ export function pruneDuplicateSqlDeps(sqlAST, namespace) {
     // the "names" property will put all the column names in an object as keys
     // the values of this object will be the SQL alias
     for (let table in depsByTable) {
-      const newNode = new SQLASTNode(sqlAST, {
+      const newNode: Partial<ColumnDeps_SQL_AST> = new SQLASTNode(sqlAST, {
         type: 'columnDeps',
         names: {},
         fromOtherTable: table || null,
       });
       depsByTable[table].forEach((name) => {
-        newNode.names[name] = namespace.generate('column', name);
+        newNode.names!![name] = namespace.generate('column', name);
       });
-      children.push(newNode);
+      // TODO: fix
+      children.push(newNode as ColumnDeps_SQL_AST);
     }
   }
 }

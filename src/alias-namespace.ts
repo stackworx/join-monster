@@ -1,10 +1,20 @@
+// @ts-ignore
 import G from 'generatorics';
 
 // this class is responsible for generating the aliases that appear in each SQL query
 // this has different rules depending on whether we are aliasing a column or table and on whether we are minifying
 export default class AliasNamespace {
-  constructor(minify) {
-    this.minify = !!minify;
+  public minify: boolean;
+  private usedTableAliases: Set<String>;
+  private columnAssignments: {[key: string]: string};
+  private mininym: {
+    next(): {
+      value: string[];
+    };
+  };
+
+  constructor(minify = false) {
+    this.minify = minify;
 
     // a generator for infinite alias names, starting with the shortest possible
     // this is helpful for generating the names when minifying

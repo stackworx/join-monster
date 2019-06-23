@@ -94,6 +94,7 @@
     "faker": "^4.1.0",
     "graphql": "^0.13.0",
     "graphsiql": "0.2.0",
+    "idx": "^2.5.6",
     "jest": "^24.8.0",
     "jsdoc-to-markdown": "^4.0.0",
     "kcors": "^2.2.1",
