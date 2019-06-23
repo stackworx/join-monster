@@ -144,13 +144,13 @@ async function getNode(
 
   // our getGraphQLType expects every requested field to be in the schema definition. "node" isn't a parent of whatever type we're getting, so we'll just wrap that type in an object that LOOKS that same as a hypothetical Node type
   const fakeParentNode = {
-    _fields: {
+    getFields: () => ({
       node: {
         type,
         name: type.name.toLowerCase(),
         where,
       },
-    },
+    }),
   };
   const namespace = new AliasNamespace(options.minify);
   const sqlAST = {};
