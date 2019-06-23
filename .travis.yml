@@ -41,6 +41,7 @@ before_script:
   - yarn db-build
 
 script:
+  - yarn typecheck
   - yarn lint
   - yarn test
 
