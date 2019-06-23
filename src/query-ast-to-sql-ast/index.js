@@ -475,7 +475,7 @@ function handleUnionSelections(
           // normally, we would scan for the extra join-monster data on the current gqlType.
           // but the gqlType is the Union. The data isn't there, its on each of the types that make up the union
           // lets find that type and handle the selections based on THAT type instead
-          const deferredType = this.schema._typeMap[selectionNameOfType];
+          const deferredType = this.schema.getTypeMap()[selectionNameOfType];
           const deferToObjectType =
             deferredType.constructor.name === 'GraphQLObjectType';
           const handler = deferToObjectType
@@ -507,7 +507,7 @@ function handleUnionSelections(
           const fragmentName = selection.name.value;
           const fragment = this.fragments[fragmentName];
           const fragmentNameOfType = fragment.typeCondition.name.value;
-          const deferredType = this.schema._typeMap[fragmentNameOfType];
+          const deferredType = this.schema.getTypeMap()[fragmentNameOfType];
           const deferToObjectType =
             deferredType.constructor.name === 'GraphQLObjectType';
           const handler = deferToObjectType

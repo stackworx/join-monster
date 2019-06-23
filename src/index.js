@@ -132,7 +132,7 @@ async function getNode(
   options = {}
 ) {
   // get the GraphQL type from the schema using the name
-  const type = resolveInfo.schema._typeMap[typeName];
+  const type = resolveInfo.schema.getTypeMap()[typeName];
   assert(type, `Type "${typeName}" not found in your schema.`);
   assert(
     type._typeConfig.sqlTable,
