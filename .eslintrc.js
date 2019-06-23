@@ -6,9 +6,16 @@ module.exports = {
   globals: {
     idx: true,
   },
-  extends: ['airbnb-base/legacy', 'prettier', 'plugin:prettier/recommended'],
+  extends: [
+    'airbnb-base/legacy',
+    'prettier',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:prettier/recommended',
+  ],
   parser: 'babel-eslint',
   rules: {
+    '@typescript-eslint/indent': 0, // handled by prettier
+    '@typescript-eslint/no-use-before-define': 0, // too many errors in existing js code: revisit later
     'no-extend-native': 0,
     'func-names': 0,
     'guard-for-in': 0,
