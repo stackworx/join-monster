@@ -5,15 +5,62 @@ import {
   GraphQLObjectType,
 } from 'graphql';
 
+export type Quote = (va?: string) => string;
+
 export interface DialectModule {
   name: string;
+
+  quote: Quote;
+
+  compositeKey(parentTable: string, name: string[]): string;
+
+  handlePaginationAtRoot<TContext>(
+    parent: Table_SQL_AST | Union_SQL_AST,
+    node: SQL_AST,
+    context: TContext,
+    tables: string[]
+  ): void;
+
+  handleBatchedOneToManyPaginated<TContext>(
+    parent: Table_SQL_AST | Union_SQL_AST,
+    node: SQL_AST,
+    context: TContext,
+    tables: string[],
+    batchScope: string[] | null
+  ): void;
+
+  handleJoinedManyToManyPaginated<TContext>(
+    parent: Table_SQL_AST | Union_SQL_AST,
+    node: SQL_AST,
+    context: TContext,
+    tables: string[],
+    joinCondition1: string,
+    joinCondition2: string
+  ): void;
+
+  handleJoinedOneToManyPaginated<TContext, TArgs>(
+    parent: Table_SQL_AST | Union_SQL_AST,
+    node: SQL_AST,
+    context: TContext,
+    tables: string[],
+    joinCondition: string
+  ): void;
+
+  handleBatchedManyToManyPaginated<TContext, TArgs>(
+    parent: Table_SQL_AST | Union_SQL_AST,
+    node: SQL_AST,
+    context: TContext,
+    tables: string[],
+    batchScope: string[],
+    joinCondition: string
+  ): void;
 }
 
 export type Dialect = 'pg' | 'oracle' | 'mariadb' | 'mysql' | 'sqlite3';
 export type JoinMonsterOptions = {
-  minify?: boolean;
-  dialect?: Dialect;
-  dialectModule?: DialectModule;
+  minify: boolean;
+  dialect: Dialect;
+  dialectModule: DialectModule;
 };
 
 type Order = 'ASC' | 'asc' | 'DESC' | 'desc';
@@ -25,13 +72,18 @@ export type OrderBy = {
   [key: string]: 'ASC' | 'DESC';
 };
 
+export type SortKey = {
+  order: Order;
+  key: string | string[];
+};
+
 export type Where<TContext, TArgs> = (
   usersTable: string,
   args: TArgs,
   context: TContext,
   // TODO
   sqlASTNode: any
-) => string | void;
+) => string | false | undefined | null;
 
 type SqlJoin<TContext, TArgs> = (
   table1: string,
@@ -48,7 +100,7 @@ interface SqlJunctionInclude {
   sqlDeps?: string | string[];
 }
 
-interface SqlJunction<TContext, TArgs> {
+export interface SqlJunction<TContext, TArgs> {
   include?: ThunkWithArgsCtx<SqlJunctionInclude, TContext, TArgs>;
   orderBy?: ThunkWithArgsCtx<OrderBy, TContext, TArgs>;
   sortKey?: ThunkWithArgsCtx<
@@ -71,10 +123,12 @@ interface SqlJunction<TContext, TArgs> {
 }
 
 export interface Noop_SQL_AST {
+  parent?: SQL_AST;
   type: 'noop';
 }
 
 export interface Table_SQL_AST<TContext = any, TArgs = any> {
+  parent?: SQL_AST;
   type: 'table';
   as: 'string';
   args: TArgs;
@@ -96,6 +150,7 @@ export interface Table_SQL_AST<TContext = any, TArgs = any> {
     sqlJoins?: SqlJunction<TContext, TArgs>['sqlJoins'];
     orderBy?: OrderBy;
     where?: Where<TContext, TArgs>;
+    sortKey?: SortKey;
     sqlBatch?: {
       sqlJoin: SqlJoin<TContext, TArgs>;
       thisKey: Column_SQL_AST;
@@ -105,6 +160,7 @@ export interface Table_SQL_AST<TContext = any, TArgs = any> {
   paginate?: boolean;
   grabMany: boolean;
   orderBy?: OrderBy;
+  sortKey: SortKey;
   children: SQL_AST[];
   defferedFrom?: string;
 }
@@ -118,6 +174,7 @@ export interface Union_SQL_AST<TContext = any, TArgs = any>
 }
 
 export interface Column_SQL_AST {
+  parent?: SQL_AST;
   type: 'column';
   name: string;
   fieldName: string;
@@ -127,12 +184,14 @@ export interface Column_SQL_AST {
 }
 
 export interface ColumnDeps_SQL_AST {
+  parent?: SQL_AST;
   type: 'columnDeps';
   fromOtherTable?: string;
   names: {[key: string]: string};
 }
 
 export interface Composite_SQL_AST {
+  parent?: SQL_AST;
   type: 'composite';
   name: string[];
   fieldName: string;
@@ -141,8 +200,10 @@ export interface Composite_SQL_AST {
 }
 
 export interface Expression_SQL_AST<TContext = any, TArgs = any> {
+  parent?: SQL_AST;
   type: 'expression';
-  args: any;
+  args: TArgs;
+  as: string;
   sqlExpr(table: string, args: TArgs, context: TContext, node: any): string;
 }
 
@@ -208,4 +269,22 @@ export interface JoinMonsterFieldConfig<
   sqlJoin?: SqlJoin<TContext, TArgs>;
   sqlPaginate?: boolean;
   where?: Where<TContext, TArgs>;
+}
+
+export function isTableAst(node: SQL_AST): node is Table_SQL_AST {
+  return (<Table_SQL_AST>node).type === 'table';
+}
+
+export function isUnionAst(node: SQL_AST): node is Union_SQL_AST {
+  return (<Union_SQL_AST>node).type === 'union';
+}
+
+export function isTableOrUnionAst(
+  node: SQL_AST
+): node is Union_SQL_AST | Table_SQL_AST {
+  return isTableAst(node) || isUnionAst(node);
+}
+
+export function isNoopAst(node: SQL_AST): node is Noop_SQL_AST {
+  return (<Noop_SQL_AST>node).type === 'noop';
 }

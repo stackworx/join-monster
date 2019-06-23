@@ -2,7 +2,6 @@ import assert from 'assert';
 import {flatMap} from 'lodash';
 import deprecate from 'deprecate';
 import {getArgumentValues} from 'graphql/execution/values';
-import idx from 'idx';
 import {
   GraphQLResolveInfo,
   FieldNode,
@@ -30,7 +29,11 @@ import {
   Union_SQL_AST,
   ColumnDeps_SQL_AST,
   JoinMonsterObjectExtensions,
+  isTableOrUnionAst,
+  isNoopAst,
+  SqlJunction,
 } from '../types';
+import {Union} from 'knex';
 
 class SQLASTNode {
   constructor(parentNode: any, props?: any) {
@@ -129,6 +132,7 @@ export function populateASTNode<TContext>(
   this: GraphQLResolveInfo,
   queryASTNode: FieldNode,
   parentTypeNode: GraphQLObjectType,
+  // TODO: try to type this later
   sqlASTNode: any,
   namespace: AliasNamespace,
   depth: number,
@@ -153,12 +157,19 @@ export function populateASTNode<TContext>(
   }
 
   let fieldIncludes;
-  if (idx(sqlASTNode, (_) => _.parent.junction.include[fieldName])) {
+  if (
+    sqlASTNode.parent &&
+    isTableOrUnionAst(sqlASTNode.parent) &&
+    sqlASTNode.parent.junction &&
+    sqlASTNode.parent.junction.include &&
+    sqlASTNode.parent.junction.include[fieldName]
+  ) {
     fieldIncludes = sqlASTNode.parent.junction.include[fieldName];
     field = {
       ...field,
       ...fieldIncludes,
     };
+    // @ts-ignore
     sqlASTNode.fromOtherTable = sqlASTNode.parent.junction.as;
   }
 
@@ -317,7 +328,7 @@ function handleTable(
     sqlASTNode.sqlJoin = field.sqlJoin;
     // or a many-to-many?
   } else if (field.junction) {
-    const junctionTable = unthunk(
+    const junctionTable: string = unthunk(
       ensure(field.junction, 'sqlTable'),
       sqlASTNode.args || {},
       context
@@ -412,7 +423,10 @@ function handleTable(
 
   // go handle the pagination information
   if (sqlASTNode.paginate) {
-    handleColumnsRequiredForPagination(sqlASTNode, namespace);
+    handleColumnsRequiredForPagination(
+      sqlASTNode as Union_SQL_AST | Table_SQL_AST,
+      namespace
+    );
   }
 
   if (queryASTNode.selectionSet) {
@@ -423,7 +437,7 @@ function handleTable(
       sqlASTNode.typedChildren = {};
       handleUnionSelections.call(
         this,
-        sqlASTNode,
+        sqlASTNode as Union_SQL_AST,
         children,
         queryASTNode.selectionSet.selections,
         gqlType,
@@ -435,7 +449,7 @@ function handleTable(
     } else {
       handleSelections.call(
         this,
-        sqlASTNode,
+        sqlASTNode as Table_SQL_AST,
         children,
         queryASTNode.selectionSet.selections,
         gqlType,
@@ -451,7 +465,7 @@ function handleTable(
 // we need to collect all fields from all the fragments requested in the union type and ask for them in SQL
 function handleUnionSelections(
   this: GraphQLResolveInfo,
-  sqlASTNode,
+  sqlASTNode: Union_SQL_AST,
   children,
   selections,
   gqlType,
@@ -470,7 +484,7 @@ function handleUnionSelections(
           (child) =>
             child.fieldName === selection.name.value && child.type === 'table'
         );
-        let newNode = new SQLASTNode(sqlASTNode);
+        let newNode: SQL_AST = new SQLASTNode(sqlASTNode) as SQL_AST;
         if (existingNode) {
           newNode = existingNode;
         } else {
@@ -504,7 +518,7 @@ function handleUnionSelections(
             ? handleSelections
             : handleUnionSelections;
           if (deferToObjectType) {
-            const typedChildren = sqlASTNode.typedChildren;
+            const typedChildren = sqlASTNode.typedChildren!!;
             children = typedChildren[deferredType.name] =
               typedChildren[deferredType.name] || [];
             internalOptions.defferedFrom = gqlType;
@@ -535,7 +549,7 @@ function handleUnionSelections(
             ? handleSelections
             : handleUnionSelections;
           if (deferToObjectType) {
-            const typedChildren = sqlASTNode.typedChildren;
+            const typedChildren = sqlASTNode.typedChildren!!;
             children = typedChildren[deferredType.name] =
               typedChildren[deferredType.name] || [];
             internalOptions.defferedFrom = gqlType;
@@ -564,7 +578,7 @@ function handleUnionSelections(
 // the selections could be several types, recursively handle each type here
 function handleSelections(
   this: GraphQLResolveInfo,
-  sqlASTNode,
+  sqlASTNode: SQL_AST,
   children,
   selections,
   gqlType,
@@ -584,7 +598,7 @@ function handleSelections(
           (child) =>
             child.fieldName === selection.name.value && child.type === 'table'
         );
-        let newNode = new SQLASTNode(sqlASTNode);
+        let newNode: SQL_AST = new SQLASTNode(sqlASTNode) as SQL_AST;
         if (existingNode) {
           newNode = existingNode;
         } else {
@@ -704,20 +718,29 @@ function keyToASTChild(
   throw new Error(`Invalid Key Object: ${key}`);
 }
 
-function handleColumnsRequiredForPagination(sqlASTNode, namespace) {
-  if (sqlASTNode.sortKey || idx(sqlASTNode, (_) => _.junction.sortKey)) {
-    const sortKey = sqlASTNode.sortKey || sqlASTNode.junction.sortKey;
+function handleColumnsRequiredForPagination(
+  sqlASTNode: Table_SQL_AST | Union_SQL_AST,
+  namespace: AliasNamespace
+) {
+  if (
+    sqlASTNode.sortKey ||
+    (sqlASTNode.junction && sqlASTNode.junction.sortKey)
+  ) {
+    const sortKey = sqlASTNode.sortKey || sqlASTNode.junction!!.sortKey;
     assert(sortKey.order, '"sortKey" must have "order"');
     // this type of paging uses the "sort key(s)". we need to get this in order to generate the cursor
     for (let column of wrap(ensure(sortKey, 'key'))) {
       const newChild = columnToASTChild(column, namespace);
       // if this joining on a "through-table", the sort key is on the threw table instead of this node's parent table
       if (!sqlASTNode.sortKey) {
-        newChild.fromOtherTable = sqlASTNode.junction.as;
+        newChild.fromOtherTable = sqlASTNode.junction!!.as;
       }
       sqlASTNode.children.push(newChild);
     }
-  } else if (sqlASTNode.orderBy || idx(sqlASTNode, (_) => _.junction.orderBy)) {
+  } else if (
+    sqlASTNode.orderBy ||
+    (sqlASTNode.junction && sqlASTNode.junction.orderBy)
+  ) {
     // this type of paging can visit arbitrary pages, so lets provide the total number of items
     // on this special "$total" column which we will compute in the query
     const newChild = columnToASTChild('$total', namespace);
@@ -878,10 +901,18 @@ function getSortColumns(field, sqlASTNode, context) {
       );
     }
   }
-  if (sqlASTNode.sortKey && idx(sqlASTNode, (_) => _.junction.sortKey)) {
+  if (
+    sqlASTNode.sortKey &&
+    sqlASTNode.junction &&
+    sqlASTNode.junction.sortKey
+  ) {
     throw new Error('"sortKey" must be on junction or main table, not both');
   }
-  if (sqlASTNode.orderBy && idx(sqlASTNode, (_) => _.junction.orderBy)) {
+  if (
+    sqlASTNode.orderBy &&
+    sqlASTNode.junction &&
+    sqlASTNode.junction.orderBy
+  ) {
     throw new Error('"orderBy" must be on junction or main table, not both');
   }
 }
