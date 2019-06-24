@@ -1,5 +1,4 @@
-// @ts-ignore
-import G from 'generatorics';
+import G, {Mininym} from 'generatorics';
 
 // this class is responsible for generating the aliases that appear in each SQL query
 // this has different rules depending on whether we are aliasing a column or table and on whether we are minifying
@@ -7,11 +6,7 @@ export default class AliasNamespace {
   public minify: boolean;
   private usedTableAliases: Set<String>;
   private columnAssignments: {[key: string]: string};
-  private mininym: {
-    next(): {
-      value: string[];
-    };
-  };
+  private mininym: Mininym;
 
   constructor(minify = false) {
     this.minify = minify;

@@ -33,7 +33,7 @@ import {
 import {JoinMonsterOptions} from '../types';
 
 class SQLASTNode {
-  constructor(parentNode: any, props?: any) {
+  constructor(parentNode: Node, props?: any) {
     Object.defineProperty(this, 'parent', {
       enumerable: false,
       value: parentNode,
@@ -166,7 +166,6 @@ export function populateASTNode<TContext>(
       ...field,
       ...fieldIncludes,
     };
-    // @ts-ignore
     sqlASTNode.fromOtherTable = sqlASTNode.parent.junction.as;
   }
 

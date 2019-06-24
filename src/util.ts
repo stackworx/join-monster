@@ -36,8 +36,11 @@ export function isEmptyArray(val) {
   return Array.isArray(val) && val.length === 0;
 }
 
-// TODO: can this be type in typescript?
-export function ensure<T>(obj: T, prop, name?: string): any {
+export function ensure<T, P extends keyof T>(
+  obj: T,
+  prop: P,
+  name?: string
+): T[P] {
   if (!obj[prop]) {
     throw new Error(
       `property "${prop}" must be defined on object: ${name ||

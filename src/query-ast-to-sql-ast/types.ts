@@ -24,8 +24,7 @@ export type Where<TContext, TArgs> = (
   usersTable: string,
   args: TArgs,
   context: TContext,
-  // TODO
-  sqlASTNode: any
+  sqlASTNode: TableNode | UnionNode
 ) => string | false | undefined | null;
 
 type SqlJoin<TContext, TArgs> = (
@@ -33,8 +32,14 @@ type SqlJoin<TContext, TArgs> = (
   table2: string,
   args: TArgs,
   context: TContext,
-  // TODO
-  sqlASTNode: any
+  sqlASTNode: TableNode | UnionNode
+) => string;
+
+type SqlExpr<TContext, TArgs> = (
+  table: string,
+  args: TArgs,
+  context: TContext,
+  sqlASTNode: ExpressionNode
 ) => string;
 
 interface SqlJunctionInclude {
@@ -61,7 +66,7 @@ export interface SqlJunction<TContext, TArgs> {
   };
   sqlJoins?: [SqlJoin<TContext, TArgs>, SqlJoin<TContext, TArgs>];
   sqlTable: ThunkWithArgsCtx<string, TContext, TArgs>;
-  uniqueKey?: string | string[];
+  uniqueKey: string | string[];
   where?: Where<TContext, TArgs>;
 }
 
@@ -147,7 +152,7 @@ export interface ExpressionNode<TContext = any, TArgs = any> {
   type: 'expression';
   args: TArgs;
   as: string;
-  sqlExpr(table: string, args: TArgs, context: TContext, node: any): string;
+  sqlExpr: SqlExpr<TArgs, TContext>;
 }
 
 export type Node =
@@ -203,12 +208,7 @@ export interface JoinMonsterFieldConfig<
   };
   sqlColumn?: string;
   sqlDeps?: string[];
-  sqlExpr?: (
-    table: string,
-    args: TArgs,
-    context: TContext,
-    sqlASTNode: any
-  ) => string;
+  sqlExpr?: SqlExpr<TContext, TArgs>;
   sqlJoin?: SqlJoin<TContext, TArgs>;
   sqlPaginate?: boolean;
   where?: Where<TContext, TArgs>;
