@@ -20,20 +20,17 @@ import {
 import AliasNamespace from '../alias-namespace';
 import {wrap, ensure, unthunk, inspect} from '../util';
 import {
-  JoinMonsterOptions,
-  SQL_AST,
+  Node,
   JoinMonsterFieldConfig,
-  Table_SQL_AST,
-  Column_SQL_AST,
-  Composite_SQL_AST,
-  Union_SQL_AST,
-  ColumnDeps_SQL_AST,
+  TableNode,
+  ColumnNode,
+  CompositeNode,
+  UnionNode,
+  ColumnDepsNode,
   JoinMonsterObjectExtensions,
   isTableOrUnionAst,
-  isNoopAst,
-  SqlJunction,
-} from '../types';
-import {Union} from 'knex';
+} from './types';
+import {JoinMonsterOptions} from '../types';
 
 class SQLASTNode {
   constructor(parentNode: any, props?: any) {
@@ -282,7 +279,7 @@ export function populateASTNode<TContext>(
 
 function handleTable(
   this: GraphQLResolveInfo,
-  sqlASTNode: Partial<Table_SQL_AST> | Partial<Union_SQL_AST>,
+  sqlASTNode: Partial<TableNode> | Partial<UnionNode>,
   queryASTNode: FieldNode,
   field: JoinMonsterFieldConfig,
   gqlType,
@@ -333,7 +330,7 @@ function handleTable(
       sqlASTNode.args || {},
       context
     );
-    const junction: Table_SQL_AST['junction'] = (sqlASTNode.junction = {
+    const junction: TableNode['junction'] = (sqlASTNode.junction = {
       sqlTable: junctionTable,
       as: namespace.generate('table', junctionTable),
     });
@@ -424,7 +421,7 @@ function handleTable(
   // go handle the pagination information
   if (sqlASTNode.paginate) {
     handleColumnsRequiredForPagination(
-      sqlASTNode as Union_SQL_AST | Table_SQL_AST,
+      sqlASTNode as UnionNode | TableNode,
       namespace
     );
   }
@@ -437,7 +434,7 @@ function handleTable(
       sqlASTNode.typedChildren = {};
       handleUnionSelections.call(
         this,
-        sqlASTNode as Union_SQL_AST,
+        sqlASTNode as UnionNode,
         children,
         queryASTNode.selectionSet.selections,
         gqlType,
@@ -449,7 +446,7 @@ function handleTable(
     } else {
       handleSelections.call(
         this,
-        sqlASTNode as Table_SQL_AST,
+        sqlASTNode as TableNode,
         children,
         queryASTNode.selectionSet.selections,
         gqlType,
@@ -465,7 +462,7 @@ function handleTable(
 // we need to collect all fields from all the fragments requested in the union type and ask for them in SQL
 function handleUnionSelections(
   this: GraphQLResolveInfo,
-  sqlASTNode: Union_SQL_AST,
+  sqlASTNode: UnionNode,
   children,
   selections,
   gqlType,
@@ -484,7 +481,7 @@ function handleUnionSelections(
           (child) =>
             child.fieldName === selection.name.value && child.type === 'table'
         );
-        let newNode: SQL_AST = new SQLASTNode(sqlASTNode) as SQL_AST;
+        let newNode: Node = new SQLASTNode(sqlASTNode) as Node;
         if (existingNode) {
           newNode = existingNode;
         } else {
@@ -578,7 +575,7 @@ function handleUnionSelections(
 // the selections could be several types, recursively handle each type here
 function handleSelections(
   this: GraphQLResolveInfo,
-  sqlASTNode: SQL_AST,
+  sqlASTNode: Node,
   children,
   selections,
   gqlType,
@@ -598,7 +595,7 @@ function handleSelections(
           (child) =>
             child.fieldName === selection.name.value && child.type === 'table'
         );
-        let newNode: SQL_AST = new SQLASTNode(sqlASTNode) as SQL_AST;
+        let newNode: Node = new SQLASTNode(sqlASTNode) as Node;
         if (existingNode) {
           newNode = existingNode;
         } else {
@@ -682,7 +679,7 @@ function handleSelections(
 
 // tell the AST we need a column that perhaps the user didnt ask for, but may be necessary for join monster to ID
 // objects or associate ones across batches
-function columnToASTChild(columnName, namespace): Column_SQL_AST {
+function columnToASTChild(columnName, namespace): ColumnNode {
   return {
     type: 'column',
     name: columnName,
@@ -702,7 +699,7 @@ function toClumsyName(keyArr): string {
 function keyToASTChild(
   key: string | string[],
   namespace
-): Column_SQL_AST | Composite_SQL_AST {
+): ColumnNode | CompositeNode {
   if (typeof key === 'string') {
     return columnToASTChild(key, namespace);
   }
@@ -719,7 +716,7 @@ function keyToASTChild(
 }
 
 function handleColumnsRequiredForPagination(
-  sqlASTNode: Table_SQL_AST | Union_SQL_AST,
+  sqlASTNode: TableNode | UnionNode,
   namespace: AliasNamespace
 ) {
   if (
@@ -813,8 +810,8 @@ function stripNonNullType(type: GraphQLOutputType): GraphQLNullableType {
 }
 
 // go through and make sure se only ask for each sqlDep once per table
-export function pruneDuplicateSqlDeps(sqlAST: SQL_AST, namespace) {
-  const childrenToLoopOver: SQL_AST[][] = [];
+export function pruneDuplicateSqlDeps(sqlAST: Node, namespace) {
+  const childrenToLoopOver: Node[][] = [];
   if ((sqlAST.type === 'table' || sqlAST.type === 'union') && sqlAST.children) {
     childrenToLoopOver.push(sqlAST.children);
   }
@@ -851,7 +848,7 @@ export function pruneDuplicateSqlDeps(sqlAST: SQL_AST, namespace) {
     // the "names" property will put all the column names in an object as keys
     // the values of this object will be the SQL alias
     for (let table in depsByTable) {
-      const newNode: Partial<ColumnDeps_SQL_AST> = new SQLASTNode(sqlAST, {
+      const newNode: Partial<ColumnDepsNode> = new SQLASTNode(sqlAST, {
         type: 'columnDeps',
         names: {},
         fromOtherTable: table || null,
@@ -860,7 +857,7 @@ export function pruneDuplicateSqlDeps(sqlAST: SQL_AST, namespace) {
         newNode.names!![name] = namespace.generate('column', name);
       });
       // TODO: fix
-      children.push(newNode as ColumnDeps_SQL_AST);
+      children.push(newNode as ColumnDepsNode);
     }
   }
 }

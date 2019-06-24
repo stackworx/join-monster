@@ -7,7 +7,8 @@ import deprecate from 'deprecate';
 const debug = require('debug')('join-monster');
 
 import defineObjectShape from './define-object-shape';
-import {SQL_AST, JoinMonsterOptions} from './types';
+import {Node} from './query-ast-to-sql-ast/types';
+import {JoinMonsterOptions} from './types';
 
 const NestHydrationJS = nesthydrationjs();
 
@@ -50,7 +51,7 @@ export function unthunk(val, ...args) {
   return typeof val === 'function' ? val(...args) : val;
 }
 
-export function validateSqlAST(topNode: SQL_AST) {
+export function validateSqlAST(topNode: Node) {
   // TODO: this could be a bit more comprehensive
   assert(
     (topNode as any).sqlJoin == null,
@@ -222,7 +223,7 @@ function validate(rows) {
 }
 
 export async function compileSqlAST<TContext>(
-  sqlAST: SQL_AST,
+  sqlAST: Node,
   context: TContext,
   options: JoinMonsterOptions
 ) {

@@ -8,14 +8,14 @@ import {
   whereConditionIsntSupposedToGoInsideSubqueryOrOnNextBatch,
 } from './shared';
 import {
-  SQL_AST,
-  JoinMonsterOptions,
-  DialectModule,
-  Table_SQL_AST,
-  Union_SQL_AST,
+  Node,
+  TableNode,
+  UnionNode,
   OrderBy,
-  Quote,
-} from '../types';
+} from '../query-ast-to-sql-ast/types';
+
+import {JoinMonsterOptions} from '../types';
+import {DialectModule, Quote} from './types';
 
 type Wheres = Array<string | false | null | undefined>;
 
@@ -29,7 +29,7 @@ interface DispatchOptions extends JoinMonsterOptions {
 }
 
 export default async function stringifySqlAST<TContext>(
-  topNode: SQL_AST,
+  topNode: Node,
   context: TContext,
   options: DispatchOptions
 ) {
@@ -79,8 +79,8 @@ export default async function stringifySqlAST<TContext>(
 }
 
 async function _stringifySqlAST<TContext>(
-  parent: null | Table_SQL_AST | Union_SQL_AST,
-  node: SQL_AST,
+  parent: null | TableNode | UnionNode,
+  node: Node,
   prefix: string[],
   context: TContext,
   selections: string[],
@@ -224,8 +224,8 @@ async function _stringifySqlAST<TContext>(
 }
 
 async function handleTable<TContext>(
-  parent: null | Table_SQL_AST | Union_SQL_AST,
-  node: Table_SQL_AST | Union_SQL_AST,
+  parent: null | TableNode | UnionNode,
+  node: TableNode | UnionNode,
   prefix: string[],
   context: TContext,
   selections: string[],
