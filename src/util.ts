@@ -7,6 +7,8 @@ import deprecate from 'deprecate';
 const debug = require('debug')('join-monster');
 
 import defineObjectShape from './define-object-shape';
+import {Node} from './query-ast-to-sql-ast/types';
+import {JoinMonsterOptions} from './types';
 
 const NestHydrationJS = nesthydrationjs();
 
@@ -14,7 +16,7 @@ export function emphasize(str, colorCode = 33) {
   return `\n\x1b[1;${colorCode}m${str}\x1b[0m\n`;
 }
 
-export function inspect(obj, options = {}) {
+export function inspect(obj: unknown, options: {} = {}) {
   return util.inspect(obj, {depth: 12, ...options});
 }
 
@@ -34,7 +36,11 @@ export function isEmptyArray(val) {
   return Array.isArray(val) && val.length === 0;
 }
 
-export function ensure(obj, prop, name) {
+export function ensure<T, P extends keyof T>(
+  obj: T,
+  prop: P,
+  name?: string
+): T[P] {
   if (!obj[prop]) {
     throw new Error(
       `property "${prop}" must be defined on object: ${name ||
@@ -48,9 +54,12 @@ export function unthunk(val, ...args) {
   return typeof val === 'function' ? val(...args) : val;
 }
 
-export function validateSqlAST(topNode) {
+export function validateSqlAST(topNode: Node) {
   // TODO: this could be a bit more comprehensive
-  assert(topNode.sqlJoin == null, 'root level field can not have "sqlJoin"');
+  assert(
+    (topNode as any).sqlJoin == null,
+    'root level field can not have "sqlJoin"'
+  );
 }
 
 export function objToCursor(obj) {
@@ -64,7 +73,7 @@ export function cursorToObj(cursor) {
 }
 
 // wrap in a pair of single quotes for the SQL if needed
-export function maybeQuote(value, dialectName) {
+export function maybeQuote(value, dialectName?) {
   if (value == null) {
     return 'NULL';
   }
@@ -173,7 +182,7 @@ export function handleUserDbCall(dbCall, sql, sqlAST, shapeDefinition) {
           const data = NestHydrationJS.nest(rows, shapeDefinition);
           resolveUnions(data, sqlAST);
           if (debug.enabled) {
-            debug(emphasize('SHAPED_DATA', inspect(data)));
+            debug(emphasize('SHAPED_DATA'), inspect(data));
           }
           resolve(data);
         }
@@ -216,13 +225,19 @@ function validate(rows) {
   );
 }
 
-export async function compileSqlAST(sqlAST, context, options) {
+export async function compileSqlAST<TContext>(
+  sqlAST: Node,
+  context: TContext,
+  options: JoinMonsterOptions
+) {
   if (debug.enabled) {
     debug(emphasize('SQL_AST'), inspect(sqlAST));
   }
 
   // now convert the "SQL AST" to sql
   options.dialect = options.dialect || 'sqlite3';
+  // TODO: deprecate and remove
+  // @ts-ignore
   if (options.dialect === 'standard') {
     deprecate(
       'dialect "standard" is deprecated, because there is no true implementation of the SQL standard',

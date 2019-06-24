@@ -1,6 +1,5 @@
 import assert from 'assert';
 import {filter} from 'lodash';
-import idx from 'idx';
 
 import {validateSqlAST, inspect, wrap} from '../util';
 import {
@@ -8,8 +7,32 @@ import {
   thisIsNotTheEndOfThisBatch,
   whereConditionIsntSupposedToGoInsideSubqueryOrOnNextBatch,
 } from './shared';
+import {
+  Node,
+  TableNode,
+  UnionNode,
+  OrderBy,
+} from '../query-ast-to-sql-ast/types';
 
-export default async function stringifySqlAST(topNode, context, options) {
+import {JoinMonsterOptions} from '../types';
+import {DialectModule, Quote} from './types';
+
+type Wheres = Array<string | false | null | undefined>;
+
+type Orders = Array<{
+  table: string;
+  columns: OrderBy;
+}>;
+
+interface DispatchOptions extends JoinMonsterOptions {
+  batchScope?: string[];
+}
+
+export default async function stringifySqlAST<TContext>(
+  topNode: Node,
+  context: TContext,
+  options: DispatchOptions
+) {
   validateSqlAST(topNode);
 
   let dialect = options.dialectModule;
@@ -28,7 +51,7 @@ export default async function stringifySqlAST(topNode, context, options) {
     [],
     [],
     [],
-    options.batchScope,
+    options.batchScope!!,
     dialect
   );
 
@@ -55,20 +78,25 @@ export default async function stringifySqlAST(topNode, context, options) {
   return sql;
 }
 
-async function _stringifySqlAST(
-  parent,
-  node,
-  prefix,
-  context,
-  selections,
-  tables,
-  wheres,
-  orders,
-  batchScope,
-  dialect
-) {
+async function _stringifySqlAST<TContext>(
+  parent: null | TableNode | UnionNode,
+  node: Node,
+  prefix: string[],
+  context: TContext,
+  selections: string[],
+  tables: string[],
+  wheres: Wheres,
+  orders: Orders,
+  batchScope: string[] | null,
+  dialect: DialectModule
+): Promise<{
+  selections: string[];
+  tables: string[];
+  wheres: Wheres;
+  orders: Orders;
+}> {
   const {quote: q} = dialect;
-  const parentTable = node.fromOtherTable || (parent && parent.as);
+  const parentTable = (node as any).fromOtherTable || (parent && parent!!.as);
   switch (node.type) {
     case 'table':
       await handleTable(
@@ -187,6 +215,7 @@ async function _stringifySqlAST(
       break;
     case 'noop':
       // we hit this with fields that don't need anything from SQL, they resolve independently
+      // @ts-ignore
       return;
     default:
       throw new Error('unexpected/unknown node type reached: ' + inspect(node));
@@ -194,25 +223,25 @@ async function _stringifySqlAST(
   return {selections, tables, wheres, orders};
 }
 
-async function handleTable(
-  parent,
-  node,
-  prefix,
-  context,
-  selections,
-  tables,
-  wheres,
-  orders,
-  batchScope,
-  dialect
+async function handleTable<TContext>(
+  parent: null | TableNode | UnionNode,
+  node: TableNode | UnionNode,
+  prefix: string[],
+  context: TContext,
+  selections: string[],
+  tables: string[],
+  wheres: Wheres,
+  orders: Orders,
+  batchScope: string[] | null,
+  dialect: DialectModule
 ) {
   const {quote: q} = dialect;
   // generate the "where" condition, if applicable
   if (whereConditionIsntSupposedToGoInsideSubqueryOrOnNextBatch(node, parent)) {
-    if (idx(node, (_) => _.junction.where)) {
+    if (node.junction && node.junction.where) {
       wheres.push(
         await node.junction.where(
-          `${q(node.junction.as)}`,
+          `${q(node.junction!!.as)}`,
           node.args || {},
           context,
           node
@@ -227,7 +256,7 @@ async function handleTable(
   }
 
   if (thisIsNotTheEndOfThisBatch(node, parent)) {
-    if (idx(node, (_) => _.junction.orderBy)) {
+    if (node.junction && node.junction.orderBy) {
       orders.push({
         table: node.junction.as,
         columns: node.junction.orderBy,
@@ -239,7 +268,7 @@ async function handleTable(
         columns: node.orderBy,
       });
     }
-    if (idx(node, (_) => _.junction.sortKey)) {
+    if (node.junction && node.junction.sortKey) {
       orders.push({
         table: node.junction.as,
         columns: sortKeyToOrderColumns(node.junction.sortKey, node.args),
@@ -256,7 +285,7 @@ async function handleTable(
   // one-to-many using JOIN
   if (node.sqlJoin) {
     const joinCondition = await node.sqlJoin(
-      `${q(parent.as)}`,
+      `${q(parent!!.as)}`,
       q(node.as),
       node.args || {},
       context,
@@ -266,7 +295,7 @@ async function handleTable(
     // do we need to paginate? if so this will be a lateral join
     if (node.paginate) {
       await dialect.handleJoinedOneToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -277,7 +306,7 @@ async function handleTable(
     } else if (node.limit) {
       node.args.first = node.limit;
       await dialect.handleJoinedOneToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -289,7 +318,7 @@ async function handleTable(
     }
 
     // many-to-many using batching
-  } else if (idx(node, (_) => _.junction.sqlBatch)) {
+  } else if (node.junction && node.junction.sqlBatch) {
     if (parent) {
       selections.push(
         `${q(parent.as)}.${q(node.junction.sqlBatch.parentKey.name)} AS ${q(
@@ -306,21 +335,21 @@ async function handleTable(
       );
       if (node.paginate) {
         await dialect.handleBatchedManyToManyPaginated(
-          parent,
+          parent!!,
           node,
           context,
           tables,
-          batchScope,
+          batchScope!!,
           joinCondition
         );
       } else if (node.limit) {
         node.args.first = node.limit;
         await dialect.handleBatchedManyToManyPaginated(
-          parent,
+          parent!!,
           node,
           context,
           tables,
-          batchScope,
+          batchScope!!,
           joinCondition
         );
       } else {
@@ -332,15 +361,15 @@ async function handleTable(
         wheres.push(
           `${q(node.junction.as)}.${q(
             node.junction.sqlBatch.thisKey.name
-          )} IN (${batchScope.join(',')})`
+          )} IN (${batchScope!!.join(',')})`
         );
       }
     }
 
     // many-to-many using JOINs
-  } else if (idx(node, (_) => _.junction.sqlTable)) {
+  } else if (node.junction && node.junction.sqlJoins) {
     const joinCondition1 = await node.junction.sqlJoins[0](
-      `${q(parent.as)}`,
+      `${q(parent!!.as)}`,
       q(node.junction.as),
       node.args || {},
       context,
@@ -356,7 +385,7 @@ async function handleTable(
 
     if (node.paginate) {
       await dialect.handleJoinedManyToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -366,7 +395,7 @@ async function handleTable(
     } else if (node.limit) {
       node.args.first = node.limit;
       await dialect.handleJoinedManyToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -392,7 +421,7 @@ async function handleTable(
       );
     } else if (node.paginate) {
       await dialect.handleBatchedOneToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -401,7 +430,7 @@ async function handleTable(
     } else if (node.limit) {
       node.args.first = node.limit;
       await dialect.handleBatchedOneToManyPaginated(
-        parent,
+        parent!!,
         node,
         context,
         tables,
@@ -411,17 +440,17 @@ async function handleTable(
     } else {
       tables.push(`FROM ${node.name} ${q(node.as)}`);
       wheres.push(
-        `${q(node.as)}.${q(node.sqlBatch.thisKey.name)} IN (${batchScope.join(
+        `${q(node.as)}.${q(node.sqlBatch.thisKey.name)} IN (${batchScope!!.join(
           ','
         )})`
       );
     }
     // otherwise, we aren't joining, so we are at the "root", and this is the start of the FROM clause
   } else if (node.paginate) {
-    await dialect.handlePaginationAtRoot(parent, node, context, tables);
+    await dialect.handlePaginationAtRoot(parent!!, node, context, tables);
   } else if (node.limit) {
     node.args.first = node.limit;
-    await dialect.handlePaginationAtRoot(parent, node, context, tables);
+    await dialect.handlePaginationAtRoot(parent!!, node, context, tables);
   } else {
     assert(
       !parent,
@@ -433,8 +462,8 @@ async function handleTable(
 
 // we need one ORDER BY clause on at the very end to make sure everything comes back in the correct order
 // ordering inner(sub) queries DOES NOT guarantee the order of those results in the outer query
-function stringifyOuterOrder(orders, q) {
-  const conditions = [];
+function stringifyOuterOrder(orders: Orders, q: Quote): string {
+  const conditions: string[] = [];
   for (let condition of orders) {
     for (let column in condition.columns) {
       const direction = condition.columns[column];
