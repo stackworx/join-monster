@@ -13,28 +13,12 @@ matrix:
   include:
     - node_js: '12'
       env: KNEX_TEST_TIMEOUT=60000 MYSQL_URL=mysql://root:testrootpassword@localhost:23306/ PG_URL=postgres://testuser:testpassword@localhost:25432/
-    - node_js: '10'
-      env: KNEX_TEST_TIMEOUT=60000 MYSQL_URL=mysql://root:testrootpassword@localhost:23306/ PG_URL=postgres://testuser:testpassword@localhost:25432/
-    - node_js: '8'
-      env: KNEX_TEST_TIMEOUT=60000 MYSQL_URL=mysql://root:testrootpassword@localhost:23306/ PG_URL=postgres://testuser:testpassword@localhost:25432/
 install:
   - yarn install --frozen-lockfile
   # - (echo $DB | grep oracledb) && npm install oracledb || true
 
 before_script:
   - yarn db:start
-  # - echo "Install oracle client libs to db container and copy to hosts ~/lib for node oracledb driver..."
-  # - docker-compose -f scripts/docker-compose.yml exec oracledbxe curl http://yum.oracle.com/public-yum-ol7.repo -o /etc/yum.repos.d/public-yum-ol7.repo
-  # - docker-compose -f scripts/docker-compose.yml exec oracledbxe yum install -y yum-utils
-  # - docker-compose -f scripts/docker-compose.yml exec oracledbxe yum-config-manager --enable ol7_oracle_instantclient
-  # - docker-compose -f scripts/docker-compose.yml exec oracledbxe yum install -y oracle-instantclient18.3-basiclite
-  # - docker cp oracledbxe_container:/usr/lib/oracle/18.3/client64/lib/ ~/
-  # - sudo sh -c "echo $HOME/lib > /etc/ld.so.conf.d/oracle-instantclient.conf"
-  # - sudo ldconfig
-  # create the databases
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE test1 LC_COLLATE 'en_US.utf8';" -U testuser
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE test2 LC_COLLATE 'en_US.utf8';" -U testuser
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE demo LC_COLLATE 'en_US.utf8';" -U testuser
   - docker-compose -f scripts/docker-compose.yml exec mysql bash -c 'echo "CREATE DATABASE test1" | mysql -uroot -ptestrootpassword'
   - docker-compose -f scripts/docker-compose.yml exec mysql bash -c 'echo "CREATE DATABASE test2" | mysql -uroot -ptestrootpassword'
   # populate them with data
@@ -43,7 +27,8 @@ before_script:
 script:
   - yarn typecheck
   - yarn lint
-  - yarn test
+  - export DEBUG=join-monster
+  - yarn testmysql-paging
 
 after_success:
   - npm run coveralls
