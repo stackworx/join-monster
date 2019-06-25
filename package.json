@@ -32,7 +32,9 @@
     "prepublishOnly": "/bin/sh ./scripts/prepublish.sh && npm run build",
     "preversion": ". ./scripts/checkgit.sh && npm test",
     "db:start": "docker-compose -f scripts/docker-compose.yml up --build -d mysql postgres; docker-compose -f scripts/docker-compose.yml up waitmysql waitpostgres",
-    "db-build": "TZ=UTC babel-node test-api/data/build.js",
+    "db:schema": "./scripts/db-schema.sh",
+    "db-build": "TZ=UTC babel-node --extensions \".js,.ts\" test-api/data/build.ts",
+    "db-build:debug": "TZ=UTC ndb ./node_modules/.bin/babel-node --extensions \".js,.ts\" test-api/data/build.ts",
     "db-shell": "sqlite3 --column --header test-api/data/db/demo-data.sl3"
   },
   "nyc": {

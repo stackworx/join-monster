@@ -32,11 +32,7 @@ before_script:
   # - sudo sh -c "echo $HOME/lib > /etc/ld.so.conf.d/oracle-instantclient.conf"
   # - sudo ldconfig
   # create the databases
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE test1 LC_COLLATE 'en_US.utf8';" -U testuser
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE test2 LC_COLLATE 'en_US.utf8';" -U testuser
-  - docker-compose -f scripts/docker-compose.yml exec postgres psql -c "CREATE DATABASE demo LC_COLLATE 'en_US.utf8';" -U testuser
-  - docker-compose -f scripts/docker-compose.yml exec mysql bash -c 'echo "CREATE DATABASE test1" | mysql -uroot -ptestrootpassword'
-  - docker-compose -f scripts/docker-compose.yml exec mysql bash -c 'echo "CREATE DATABASE test2" | mysql -uroot -ptestrootpassword'
+  - ./scripts/db-schema.sh
   # populate them with data
   - yarn db-build
 

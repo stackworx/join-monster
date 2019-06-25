@@ -1,5 +1,7 @@
-module.exports = async (db) => {
-  const knex = await require('../schema/setup')(db, 'test1');
+import setup from '../schema/setup';
+
+export default async function test1(db: string) {
+  const knex = await setup(db, 'test1');
 
   await knex.batchInsert('accounts', [
     {
@@ -183,4 +185,4 @@ module.exports = async (db) => {
   ]);
 
   await knex.destroy();
-};
+}
