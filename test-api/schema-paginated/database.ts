@@ -1,5 +1,6 @@
-import assert from 'assert';
 import path from 'path';
+
+import {MYSQL_URL, PG_URL, ORACLE_URL} from '../urls';
 
 const dbType = process.env.DB;
 
@@ -33,26 +34,14 @@ export default require('knex')({
 });
 
 function pgUrl(dbName) {
-  assert(
-    process.env.PG_URL,
-    'Environment variable PG_URL must be defined, e.g. "postgres://user:pass@localhost/"'
-  );
-  return process.env.PG_URL + dbName;
+  return PG_URL + dbName;
 }
 
 function mysqlUrl(dbName) {
-  assert(
-    process.env.MYSQL_URL,
-    'Environment variable MYSQL_URL must be defined, e.g. "mysql//user:pass@localhost/"'
-  );
-  return process.env.MYSQL_URL + dbName;
+  return MYSQL_URL + dbName;
 }
 
 function oracleUrl(dbName) {
-  assert(
-    process.env.ORACLE_URL,
-    'Environment variable ORACLE_URL must be defined, e.g. "pass@localhost:port/sid"'
-  );
-  const [password, connectString] = process.env.ORACLE_URL!!.split('@');
+  const [password, connectString] = ORACLE_URL!!.split('@');
   return {user: dbName, password, connectString, stmtCacheSize: 0};
 }

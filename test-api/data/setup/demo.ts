@@ -1,4 +1,5 @@
 import faker from 'faker';
+import setup from '../schema/setup';
 
 function* count(limit) {
   for (let i = 0; i < limit; i++) {
@@ -12,8 +13,8 @@ const numComments = 300;
 const numRelationships = 15;
 const numLikes = 300;
 
-module.exports = async (db) => {
-  const knex = await require('../schema/setup')(db, 'demo');
+export default async function demo(db: string) {
+  const knex = await setup(db, 'demo');
 
   console.log('creating accounts...');
   const accounts = new Array(numUsers);
@@ -53,7 +54,7 @@ module.exports = async (db) => {
   await knex.batchInsert('comments', comments, 50);
 
   console.log('creating relationships...');
-  const relationships = [];
+  const relationships: any[] = [];
   const used = new Set();
   for (let __ of count(numRelationships)) {
     const follower_id = faker.random.number({min: 1, max: numUsers});
@@ -72,7 +73,7 @@ module.exports = async (db) => {
   await knex.batchInsert('relationships', relationships, 50);
 
   console.log('creating likes...');
-  const likes = [];
+  const likes: any[] = [];
   const usedLikes = new Set();
   for (let __ of count(numLikes)) {
     const account_id = faker.random.number({min: 1, max: numUsers});
@@ -118,4 +119,4 @@ module.exports = async (db) => {
   ]);
 
   await knex.destroy();
-};
+}
